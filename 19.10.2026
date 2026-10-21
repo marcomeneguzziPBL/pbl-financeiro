@@ -116,7 +116,7 @@
   var auth={ currentUser:ADMIN };
   function onAuthStateChanged(a,cb){ setTimeout(function(){ cb(ADMIN); },0); return function(){}; }
   function signInWithPopup(){ return Promise.resolve({user:ADMIN}); }
-  function signOut(){ auth.currentUser=null; return Promise.resolve(); }
+  function signOut(){ return Promise.resolve(); } /* standalone: sessão fixa, sem logout */
   function GoogleAuthProvider(){}
 
   window.fb={ auth:auth, db:{__db:true}, fn:{__fn:true},
@@ -125,6 +125,9 @@
     serverTimestamp:serverTimestamp, writeBatch:writeBatch, httpsCallable:httpsCallable,
     GoogleAuthProvider:GoogleAuthProvider, signInWithPopup:signInWithPopup, signOut:signOut, onAuthStateChanged:onAuthStateChanged };
   window.__STANDALONE__=true;
+  /* standalone: sem tela de login do Google, sem botão Sair, e sem depender de CDN (se Chart.js não carregar, usa um stub) */
+  (function(){ var st=document.createElement("style"); st.textContent="#login-screen{display:none!important}.btn-logout{display:none!important}"; (document.head||document.documentElement).appendChild(st);
+    if(typeof window.Chart==="undefined"){ var C=function(){ this.destroy=function(){}; this.update=function(){}; this.resize=function(){}; }; C.register=function(){}; C.defaults={font:{},plugins:{legend:{labels:{}}}}; window.Chart=C; } })();
   /* perfil financeiro: menu só com Lançamentos, Relatórios e Processos; o resto redireciona para o Financeiro */
   (function(){ var PG=["processos","financeiro","fluxocaixa","operacional","campanhas","advogados","comissoesgestoras","geracaonegocios","resumo","cnab","relliqdiario","previsao","relliq2","relcomp","relgeral","relpend"];
     function filtra(){ var sb=document.getElementById("sidebar"); if(!sb) return;
