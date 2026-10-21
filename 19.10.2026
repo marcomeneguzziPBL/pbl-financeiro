@@ -829,6 +829,8 @@ var S={
   distribValidacao:[],
   // financeiro: [{id,tipo:'compra'|'venda'|'despesa',data,descricao,valor,banco,processoId,categoria,obs}]
   financeiro:[],
+  // contas: [{id,nome,banco,agencia,conta,titular,entidade:'PBL'|'FIDC'|'CERTJUD',tipo:'operacional'|'vinculada',saldoInicial,dataSaldoInicial,ativa}]
+  contas:[],
   notificacoes:[],
   partes:[],
   analisesIA:[],
@@ -865,6 +867,7 @@ async function loadData(){
   try{ S.analisesIA=await fetchCollection('analisesIA'); }catch(e){ S.analisesIA=[]; }
   try{ S.manual=await fetchCollection('manual'); }catch(e){ S.manual=[]; }
   try{ S.financeiro=await fetchCollection('lancamentos'); }catch(e){ S.financeiro=[]; }
+  try{ S.contas=await fetchCollection('contas'); }catch(e){ S.contas=[]; }
   try{
     if(currentUser && currentUser.role==='lawyer' && currentUser.lawyerId){
       var _vq=fb.query(fb.collection(fb.db,'validacoes'), fb.where('advogadoId','==',currentUser.lawyerId));
@@ -1093,6 +1096,7 @@ function startCollectionListeners(){
   subscribeCollection('gestoras',     function(a){ S.gestoras = a; },                                               ['operacional','comissoesgestoras','usuarios','minhascomissoes']);
   subscribeCollection('liquidacoes',  function(a){ S.liqManual = a; },                                              ['reliquidados','resumo','dashboard']);
   subscribeCollection('lancamentos',  function(a){ S.financeiro = a; },                                             ['financeiro','fluxocaixa','resumo']);
+  subscribeCollection('contas',       function(a){ S.contas = a; },                                                 ['financeiro']);
   // Advogado só enxerga as próprias validações (onde é o validador); demais perfis veem tudo.
   var _valQ = (currentUser && currentUser.role==='lawyer' && currentUser.lawyerId)
     ? fb.query(fb.collection(fb.db,'validacoes'), fb.where('advogadoId','==',currentUser.lawyerId))
@@ -8246,30 +8250,72 @@ function podeVerAdministrativo(u){
 // ════════════════════════════════════════════════════════════
 // FINANCEIRO — Compra PBL / Venda FIDC / Despesas
 // ════════════════════════════════════════════════════════════
-function finEntidade(l){ return (l&&l.entidade) ? l.entidade : 'PBL'; }
-function titToEntidade(t){ t=String(t||''); if(/fidc/i.test(t))return 'FIDC'; if(/certjud/i.test(t))return 'CERTJUD'; return 'PBL'; }
-function caixaSaldos(list){ var r={PBL:{ent:0,sai:0},FIDC:{ent:0,sai:0},CERTJUD:{ent:0,sai:0}}; (list||S.financeiro||[]).forEach(function(f){ var e=finEntidade(f); if(!r[e])r[e]={ent:0,sai:0}; if(f.tipo==='venda')r[e].ent+=(Number(f.valor)||0); else r[e].sai+=(Number(f.valor)||0); }); Object.keys(r).forEach(function(k){ r[k].saldo=r[k].ent-r[k].sai; }); return r; }
-// Contas bancárias controladas. tipo: 'operacional' (dia a dia) | 'vinculada' (trânsito dos recebimentos; repasse ao fundo, cuja conta principal não é controlada aqui).
-var CONTAS_DEF=[
-  {id:'pbl-op',    label:'PBL Originadora',        banco:'Genial',    conta:'5253996-2',  titular:'PBL Originadora',      entidade:'PBL',     tipo:'operacional', saldoInicial:0},
-  {id:'fidc-v1',   label:'PBL FIDC (vinculada 1)', banco:'Genial',    conta:'38219-1',    titular:'PBL FIDC',             entidade:'FIDC',    tipo:'vinculada',   saldoInicial:0},
-  {id:'fidc-v2',   label:'Evilyn FIDC (vinculada 2)',banco:'Genial',  conta:'5244902-5',  titular:'Evilyn Wagner de Souza',entidade:'FIDC',   tipo:'vinculada',   saldoInicial:0},
-  {id:'certjud-op',label:'Certjud',                banco:'Santander', agencia:'3131', conta:'130090241', titular:'Certjud', entidade:'CERTJUD', tipo:'operacional', saldoInicial:0}
+// Tipos de lançamento. `tipo` mantém os valores antigos (venda/compra/despesa) para o Fluxo de Caixa e demais telas continuarem lendo.
+// venda = Receita (entrada) · compra = Aquisição de processo · despesa · transferencia (duas pernas, mesmo grupoId) · repasse (saída de conta vinculada para o fundo).
+var FIN_TIPO_LBL={venda:'Receita',compra:'Aquisição de processo',despesa:'Despesa',transferencia:'Transferência',repasse:'Repasse ao fundo'};
+var FIN_CATS={
+  venda:['Recebimento de processo','Venda de crédito (FIDC)','Outras receitas'],
+  compra:['Aquisição de processo'],
+  despesa:['Custas e certidões','Honorários e correspondentes','Comissões','Pessoal','Tecnologia','Impostos e tarifas','Outras despesas'],
+  transferencia:['Transferência entre contas'],
+  repasse:['Repasse ao fundo']
+};
+var FIN_FORMAS=['PIX','TED','Boleto','Dinheiro','Outro'];
+var FIN_EMPRESAS=['PBL','FIDC','CERTJUD'];
+// Contas padrão da operação (botão "Cadastrar as 4 contas padrão" na tela Contas).
+var FIN_CONTAS_PADRAO=[
+  {id:'pbl-op',    nome:'PBL Originadora',          banco:'Genial',    agencia:'',     conta:'5253996-2',  titular:'PBL Originadora',        entidade:'PBL',     tipo:'operacional'},
+  {id:'fidc-v1',   nome:'PBL FIDC (vinculada 1)',   banco:'Genial',    agencia:'',     conta:'38219-1',    titular:'PBL FIDC',               entidade:'FIDC',    tipo:'vinculada'},
+  {id:'fidc-v2',   nome:'Evilyn FIDC (vinculada 2)',banco:'Genial',    agencia:'',     conta:'5244902-5',  titular:'Evilyn Wagner de Souza', entidade:'FIDC',    tipo:'vinculada'},
+  {id:'certjud-op',nome:'Certjud',                  banco:'Santander', agencia:'3131', conta:'130090241',  titular:'Certjud',                entidade:'CERTJUD', tipo:'operacional'}
 ];
-function contaById(id){ return CONTAS_DEF.find(function(c){return c.id===id;})||null; }
-function contaSaldos(list){
-  var r={}; CONTAS_DEF.forEach(function(c){ r[c.id]={ent:0,sai:0}; }); r['']={ent:0,sai:0};
-  (list||S.financeiro||[]).forEach(function(f){ var k=contaById(f.conta)?f.conta:''; if(f.tipo==='venda')r[k].ent+=(Number(f.valor)||0); else r[k].sai+=(Number(f.valor)||0); });
-  Object.keys(r).forEach(function(k){ var c=contaById(k); r[k].saldo=(c?c.saldoInicial||0:0)+r[k].ent-r[k].sai; });
+var _finTab='geral', _finConta='', _finExtDi='', _finExtDf='';
+var _finF={vis:'todos',conta:'',di:'',df:'',q:''};
+
+function finStatus(f){ return (f&&f.status)||'pago'; }
+function finSentido(f){ return f.tipo==='venda'?'entrada':(f.tipo==='transferencia'?(f.sentido||'saida'):'saida'); }
+function finData(f){ return f.dataBaixa||f.vencimento||f.data||''; }
+function finVencido(f){ return finStatus(f)==='previsto' && (f.vencimento||f.data||'')<todayStr(); }
+// Entra no Fluxo de Caixa: só o que já foi pago/recebido e não é movimentação entre contas próprias.
+function finRealizado(f){ return finStatus(f)==='pago' && f.tipo!=='transferencia'; }
+function contaById(id){ return (S.contas||[]).find(function(c){return c.id===id;})||null; }
+function finEntidade(l){ if(l&&l.entidade)return l.entidade; var c=contaById(l&&l.conta); return c?c.entidade:'PBL'; }
+function finContaNome(f){ var c=contaById(f.conta); return c?c.nome:(f.banco||'—'); }
+function finNovoId(col){ return fb.doc(fb.collection(fb.db,col)).id; }
+function titToEntidade(t){ t=String(t||''); if(/fidc/i.test(t))return 'FIDC'; if(/certjud/i.test(t))return 'CERTJUD'; return 'PBL'; }
+// Saldo de cada conta = saldo inicial + entradas pagas − saídas pagas (a partir da data do saldo inicial). Previstos ficam à parte.
+function contaSaldos(){
+  var r={};
+  (S.contas||[]).forEach(function(c){ r[c.id]={ent:0,sai:0,prevEnt:0,prevSai:0,ini:Number(c.saldoInicial)||0}; });
+  (S.financeiro||[]).forEach(function(f){
+    var x=r[f.conta]; if(!x)return;
+    var st=finStatus(f); if(st==='cancelado')return;
+    var c=contaById(f.conta); if(c&&c.dataSaldoInicial&&finData(f)<c.dataSaldoInicial)return;
+    var v=Number(f.valor)||0, ent=finSentido(f)==='entrada';
+    if(st==='pago'){ if(ent)x.ent+=v; else x.sai+=v; } else { if(ent)x.prevEnt+=v; else x.prevSai+=v; }
+  });
+  Object.keys(r).forEach(function(k){ r[k].saldo=r[k].ini+r[k].ent-r[k].sai; });
   return r;
 }
-function finContaLabel(f){ var c=contaById(f&&f.conta); return c?c.label:(f&&f.banco)||''; }
-function finRowHTML(f){
-  var proc=f.processoId?(S.processos.find(function(p){return p.id===f.processoId;})||{numero:'—'}).numero:'—';
-  var cor=f.tipo==='venda'?'#1D6B3A':'var(--red)';
-  return'<tr><td>'+fmtDate(f.data)+'</td><td>'+finTipoBadge(f)+'</td><td>'+esc(f.descricao)+'</td><td style="font-size:11px">'+proc+'</td><td>'+esc(finContaLabel(f))+'</td><td>'+esc(f.categoria||'')+'</td><td class="r" style="color:'+cor+'"><strong>'+fmt(f.valor)+'</strong></td><td style="font-size:11px;color:var(--mt)">'+esc(f.obs||'')+'</td><td><button class="dbtn" onclick="deleteFin(\''+f.id+'\')">×</button></td></tr>';
+async function upsertConta(c){
+  var id=c.id||finNovoId('contas');
+  var payload=Object.assign({},c,{id:id,saldoInicial:Number(c.saldoInicial)||0,updatedAt:fb.serverTimestamp(),updatedBy:currentUser.id});
+  if(!c.createdAt){ payload.createdAt=fb.serverTimestamp(); payload.createdBy=currentUser.id; }
+  await fb.setDoc(fb.doc(fb.db,'contas',id),payload,{merge:true});
+  return id;
 }
-function finTipoBadge(f){ var tb=f.tipo==='compra'?'<span class="badge b-compra">Compra</span>':f.tipo==='venda'?'<span class="badge b-venda">Entrada</span>':'<span class="badge b-desp">Despesa</span>'; var e=finEntidade(f); var ec=e==='FIDC'?'var(--dl)':(e==='CERTJUD'?'var(--greenl)':'var(--bluel)'); var efg=e==='FIDC'?'var(--d)':(e==='CERTJUD'?'var(--green)':'var(--blue)'); return tb+' <span class="badge" style="background:'+ec+';color:'+efg+'">'+e+'</span>'; }
+function finTipoBadge(f){
+  var tb=f.tipo==='compra'?'<span class="badge b-compra">Aquisição</span>':f.tipo==='venda'?'<span class="badge b-venda">Receita</span>':f.tipo==='despesa'?'<span class="badge b-desp">Despesa</span>':'<span class="badge" style="background:var(--dl);color:var(--d)">'+FIN_TIPO_LBL[f.tipo]+'</span>';
+  var e=finEntidade(f); var ec=e==='FIDC'?'var(--dl)':(e==='CERTJUD'?'var(--greenl)':'var(--bluel)'); var efg=e==='FIDC'?'var(--d)':(e==='CERTJUD'?'var(--green)':'var(--blue)');
+  return tb+' <span class="badge" style="background:'+ec+';color:'+efg+'">'+e+'</span>';
+}
+function finStatusBadge(f){
+  var st=finStatus(f), ent=finSentido(f)==='entrada';
+  if(st==='cancelado') return '<span class="badge" style="background:var(--row-alt);color:var(--mt)">Cancelado</span>';
+  if(st==='pago') return '<span class="badge b-venda">'+(ent?'Recebido':'Pago')+'</span>';
+  if(finVencido(f)) return '<span class="badge b-desp">Vencido</span>';
+  return '<span class="badge" style="background:var(--dl);color:var(--d)">'+(ent?'A receber':'A pagar')+'</span>';
+}
 async function venderFidc(id){ if(!canVenderFidc(currentUser)){ showToast('Venda ao FIDC: apenas Evilyn ou Marco têm autorização.'); return; }
   var p=(S.processos||[]).find(function(x){return x.id===id;}); if(!p)return;
   if(!canWriteLiquidacoes(currentUser)){ showToast('Sem permissão para registrar venda.'); return; }
@@ -8539,108 +8585,295 @@ function ppVendaFidcBox(id,p){
 }
 
 function pageFinanceiro(){
-  var procOpts=S.processos.map(function(p){return'<option value="'+p.id+'">'+p.numero+' — '+esc(p.cliente)+'</option>';}).join('');
-  var cx=caixaSaldos();
-  var tCompra=S.financeiro.filter(function(f){return f.tipo==='compra';}).reduce(function(s,f){return s+(f.valor||0);},0);
-  var tVenda=S.financeiro.filter(function(f){return f.tipo==='venda';}).reduce(function(s,f){return s+(f.valor||0);},0);
-  var tDesp=S.financeiro.filter(function(f){return f.tipo==='despesa';}).reduce(function(s,f){return s+(f.valor||0);},0);
-  var res=tVenda-tCompra-tDesp;
-  var rows=S.financeiro.slice().sort(function(a,b){return(b.data||'').localeCompare(a.data||'');}).map(finRowHTML).join('');
-  var cs=contaSaldos();
-  var contaOpts=CONTAS_DEF.map(function(c){return'<option value="'+c.id+'">'+esc(c.label)+' — '+esc(c.banco)+' '+esc(c.conta)+'</option>';}).join('');
-  function contaCard(c){ var x=cs[c.id]; return'<div class="mc '+(c.entidade==='FIDC'?'gold':c.entidade==='CERTJUD'?'green':'blue')+'"><div class="ml">'+esc(c.label)+'</div><div class="mv">'+fmt(x.saldo)+'</div><div style="font-size:11px;color:var(--mt)">'+esc(c.banco)+(c.agencia?' ag. '+esc(c.agencia):'')+' · '+esc(c.conta)+'</div><div style="font-size:11px;color:var(--mt)">entradas '+fmt(x.ent)+' · saídas '+fmt(x.sai)+'</div></div>'; }
-  var semConta=cs[''].ent||cs[''].sai?'<div class="mc"><div class="ml">Sem conta (lançamentos antigos)</div><div class="mv">'+fmt(cs[''].saldo)+'</div><div style="font-size:11px;color:var(--mt)">entradas '+fmt(cs[''].ent)+' · saídas '+fmt(cs[''].sai)+'</div></div>':'';
+  var tabs=[['geral','Visão geral'],['contas','Contas'],['lanc','Lançamentos']];
+  var bar='<div style="display:flex;gap:4px;background:var(--row-alt);border:1px solid var(--bd);border-radius:8px;padding:4px;width:fit-content;margin-bottom:16px;flex-wrap:wrap">'+tabs.map(function(t){
+    var on=_finTab===t[0];
+    return '<button class="btn'+(on?' bp':'')+'" style="font-size:13px;padding:6px 16px;border-radius:6px'+(on?'':';background:none')+'" onclick="finSetTab(\''+t[0]+'\')">'+t[1]+'</button>';
+  }).join('')+'</div>';
+  var body=_finTab==='contas'?(_finConta?finViewExtrato():finViewContas()):_finTab==='lanc'?finViewLanc():finViewGeral();
+  return '<div class="page-title">'+I.financeiro+' Financeiro</div>'+bar+body;
+}
+function finSetTab(t){ _finTab=t; if(t!=='contas')_finConta=''; navigate('financeiro'); }
+function finSemConta(){ return (S.financeiro||[]).filter(function(f){return !contaById(f.conta) && finStatus(f)!=='cancelado';}).length; }
+function finAvisoSemConta(){
+  var n=finSemConta(); if(!n) return '';
+  return '<div class="card" style="border-left:4px solid var(--d);margin-bottom:14px;font-size:13px"><strong>'+n+' lançamento'+(n>1?'s':'')+' sem conta.</strong> Não entram no saldo de nenhuma conta. Abra em Lançamentos para identificar a conta.</div>';
+}
 
-  return'<div class="page-title">'+I.financeiro+' Lançamentos Financeiros</div>'+
-  '<div class="st" style="margin-top:0">Contas operacionais</div>'+
-  '<div class="metrics">'+CONTAS_DEF.filter(function(c){return c.tipo==='operacional';}).map(contaCard).join('')+'</div>'+
-  '<div class="st">Contas vinculadas ao fundo (trânsito)</div>'+
-  '<div class="metrics">'+CONTAS_DEF.filter(function(c){return c.tipo==='vinculada';}).map(contaCard).join('')+semConta+'</div>'+
-  '<div class="st">Caixas por empresa (saldo = entradas − saídas)</div>'+
-  '<div class="metrics">'+
-    '<div class="mc blue"><div class="ml">Caixa PBL</div><div class="mv blue">'+fmt(cx.PBL.saldo)+'</div><div style="font-size:11px;color:var(--mt)">entradas '+fmt(cx.PBL.ent)+' · saídas '+fmt(cx.PBL.sai)+'</div></div>'+
-    '<div class="mc gold"><div class="ml">Caixa FIDC</div><div class="mv gold">'+fmt(cx.FIDC.saldo)+'</div><div style="font-size:11px;color:var(--mt)">entradas '+fmt(cx.FIDC.ent)+' · saídas '+fmt(cx.FIDC.sai)+'</div></div>'+
-    '<div class="mc green"><div class="ml">Caixa CERTJUD</div><div class="mv green">'+fmt(cx.CERTJUD.saldo)+'</div><div style="font-size:11px;color:var(--mt)">entradas '+fmt(cx.CERTJUD.ent)+' · saídas '+fmt(cx.CERTJUD.sai)+'</div></div>'+
-  '</div>'+
-  '<div class="st">Resumo por tipo</div>'+
-  '<div class="metrics">'+
-    '<div class="mc blue"><div class="ml">Compras PBL</div><div class="mv blue">'+fmt(tCompra)+'</div><div style="font-size:11px;color:var(--mt)">'+S.financeiro.filter(function(f){return f.tipo==='compra';}).length+' lançamentos</div></div>'+
-    '<div class="mc green"><div class="ml">Vendas ao FIDC PBL</div><div class="mv green">'+fmt(tVenda)+'</div><div style="font-size:11px;color:var(--mt)">'+S.financeiro.filter(function(f){return f.tipo==='venda';}).length+' lançamentos</div></div>'+
-    '<div class="mc red"><div class="ml">Despesas Operacionais</div><div class="mv red">'+fmt(tDesp)+'</div><div style="font-size:11px;color:var(--mt)">'+S.financeiro.filter(function(f){return f.tipo==='despesa';}).length+' lançamentos</div></div>'+
-    '<div class="mc '+(res>=0?'':'red')+'"><div class="ml">Resultado (Vendas − Compras − Desp.)</div><div class="mv '+(res>=0?'':'red')+'">'+fmt(res)+'</div></div>'+
-  '</div>'+
-  '<div class="st">Novo lançamento</div>'+
-  '<div class="card">'+
-    '<div class="g4" style="margin-bottom:10px">'+
-      '<div class="fg"><label>Tipo *</label><select id="fin-tipo" onchange="finTipoChange()"><option value="compra">Compra de Processo (PBL)</option><option value="venda">Venda ao FIDC PBL</option><option value="despesa">Despesa Operacional</option></select></div>'+
-      '<div class="fg"><label>Data *</label><input type="date" id="fin-data" value="'+todayStr()+'"/></div>'+
-      '<div class="fg"><label>Valor (R$) *</label><input type="number" id="fin-valor" min="0" step="0.01" placeholder="0,00"/></div>'+
-      '<div class="fg"><label>Conta *</label><select id="fin-conta"><option value="">Selecione…</option>'+contaOpts+'</select></div>'+
-    '</div>'+
-    '<div class="g3" style="margin-bottom:10px">'+
-      '<div class="fg" style="grid-column:1/-1"><label>Descrição *</label><input type="text" id="fin-desc" placeholder="Ex: Compra processo — Cliente João Silva"/></div>'+
-    '</div>'+
-    '<div class="g4" style="margin-bottom:12px">'+
-      '<div class="fg" id="fin-proc-fg"><label>Processo vinculado</label><select id="fin-proc"><option value="">Nenhum</option>'+procOpts+'</select></div>'+
-      '<div class="fg"><label>Categoria</label><input type="text" id="fin-cat" placeholder="Ex: Aquisição, Custo fixo..."/></div>'+
-      '<div class="fg"><label>Observação</label><input type="text" id="fin-obs" placeholder="Opcional"/></div>'+
-      '<div style="display:flex;align-items:flex-end"><button class="btn bp" onclick="addFin()" style="width:100%">+ Registrar</button></div>'+
-    '</div>'+
-  '</div>'+
-  '<div class="filter-bar no-print">'+
-    '<div class="fg" style="max-width:170px"><label>Tipo</label><select id="fin-tf" onchange="filterFin()"><option value="todos">Todos</option><option value="compra">Compras PBL</option><option value="venda">Vendas FIDC</option><option value="despesa">Despesas</option></select></div>'+
-    '<div class="fg" style="max-width:220px"><label>Conta</label><select id="fin-cf" onchange="filterFin()"><option value="">Todas</option>'+contaOpts+'</select></div>'+
-    '<div class="fg"><label>Data início</label><input type="date" id="fin-di" onchange="filterFin()"/></div>'+
-    '<div class="fg"><label>Data fim</label><input type="date" id="fin-df" onchange="filterFin()"/></div>'+
-    '<input class="search-input" id="fin-q" placeholder="Buscar descrição, observação..." oninput="filterFin()"/>'+
-    '<button class="print-btn" onclick="window.print()">Imprimir</button>'+
-  '</div>'+
-  '<div class="card" style="padding:0;overflow-x:auto">'+
-    '<table class="tbl"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Processo</th><th>Conta</th><th>Categoria</th><th class="r">Valor</th><th>Obs.</th><th>Ação</th></tr></thead>'+
-    '<tbody id="fin-tbody">'+(rows||'<tr><td colspan="9" class="empty">Nenhum lançamento registrado.</td></tr>')+'</tbody></table>'+
-  '</div>';
+// ───────── Visão geral ─────────
+function finContaCard(c,cs){
+  var x=cs[c.id]; var cor=c.entidade==='FIDC'?'gold':c.entidade==='CERTJUD'?'green':'blue';
+  return '<div class="mc '+cor+'" style="cursor:pointer" onclick="finAbrirExtrato(\''+c.id+'\')"><div class="ml">'+esc(c.nome)+(c.ativa===false?' (inativa)':'')+'</div><div class="mv '+cor+'">'+fmt(x.saldo)+'</div>'+
+    '<div style="font-size:11px;color:var(--mt)">'+esc(c.banco)+(c.agencia?' ag. '+esc(c.agencia):'')+' · '+esc(c.conta)+'</div>'+
+    '<div style="font-size:11px;color:var(--mt)">a receber '+fmt(x.prevEnt)+' · a pagar '+fmt(x.prevSai)+'</div></div>';
 }
-function finTipoChange(){
-  var t=document.getElementById('fin-tipo');if(!t)return;
-  var fg=document.getElementById('fin-proc-fg');
-  if(fg)fg.style.display=t.value==='despesa'?'none':'flex';
+function finViewGeral(){
+  var cs=contaSaldos(), contas=(S.contas||[]).filter(function(c){return c.ativa!==false;});
+  if(!(S.contas||[]).length) return finViewContasVazio();
+  var somaTipo=function(tp){ return contas.filter(function(c){return c.tipo===tp;}).reduce(function(s,c){return s+cs[c.id].saldo;},0); };
+  var prev=(S.financeiro||[]).filter(function(f){return finStatus(f)==='previsto' && f.tipo!=='transferencia';});
+  var rec=prev.filter(function(f){return f.tipo==='venda';}), pag=prev.filter(function(f){return f.tipo!=='venda';});
+  var soma=function(a){ return a.reduce(function(s,f){return s+(Number(f.valor)||0);},0); };
+  var venc=prev.filter(finVencido);
+  var proximos=prev.slice().sort(function(a,b){return (a.vencimento||a.data||'').localeCompare(b.vencimento||b.data||'');}).slice(0,8).map(function(f){
+    return '<tr><td>'+fmtDate(f.vencimento||f.data)+'</td><td>'+finTipoBadge(f)+'</td><td>'+esc(f.descricao)+'</td><td>'+esc(finContaNome(f))+'</td><td class="r" style="color:'+(f.tipo==='venda'?'#1D6B3A':'var(--red)')+'"><strong>'+fmt(f.valor)+'</strong></td><td>'+finStatusBadge(f)+'</td><td><button class="btn" style="font-size:11px;padding:3px 9px" onclick="finModalBaixar(\''+f.id+'\')">Dar baixa</button></td></tr>';
+  }).join('');
+  var porEmp=FIN_EMPRESAS.map(function(e){ var s=contas.filter(function(c){return c.entidade===e;}).reduce(function(t,c){return t+cs[c.id].saldo;},0); return '<div class="mc"><div class="ml">Saldo '+e+'</div><div class="mv">'+fmt(s)+'</div></div>'; }).join('');
+  return finAvisoSemConta()+
+    '<div class="metrics">'+
+      '<div class="mc blue"><div class="ml">Saldo nas contas operacionais</div><div class="mv blue">'+fmt(somaTipo('operacional'))+'</div></div>'+
+      '<div class="mc gold"><div class="ml">A repassar ao fundo (vinculadas)</div><div class="mv gold">'+fmt(somaTipo('vinculada'))+'</div></div>'+
+      '<div class="mc green"><div class="ml">A receber (previsto)</div><div class="mv green">'+fmt(soma(rec))+'</div><div style="font-size:11px;color:var(--mt)">'+rec.length+' lançamento'+(rec.length===1?'':'s')+'</div></div>'+
+      '<div class="mc red"><div class="ml">A pagar (previsto)</div><div class="mv red">'+fmt(soma(pag))+'</div><div style="font-size:11px;color:var(--mt)">'+pag.length+' lançamento'+(pag.length===1?'':'s')+(venc.length?' · '+venc.length+' vencido'+(venc.length>1?'s':''):'')+'</div></div>'+
+    '</div>'+
+    '<div class="st">Contas</div><div class="metrics">'+contas.map(function(c){return finContaCard(c,cs);}).join('')+'</div>'+
+    '<div class="st">Saldo por empresa</div><div class="metrics">'+porEmp+'</div>'+
+    '<div class="st">Próximos vencimentos</div>'+
+    '<div class="card" style="padding:0;overflow-x:auto"><table class="tbl"><thead><tr><th>Vencimento</th><th>Tipo</th><th>Descrição</th><th>Conta</th><th class="r">Valor</th><th>Situação</th><th></th></tr></thead><tbody>'+
+    (proximos||'<tr><td colspan="7" class="empty">Nada previsto. Use Lançamentos para registrar contas a pagar e a receber.</td></tr>')+'</tbody></table></div>';
 }
-async function addFin(){if(!isFullAccess(currentUser)){showToast("Apenas o administrador pode realizar esta ação.");return;}
-  var tipo=document.getElementById('fin-tipo').value;
-  var data=document.getElementById('fin-data').value;
-  var valor=parseFloat(document.getElementById('fin-valor').value)||0;
-  var contaId=document.getElementById('fin-conta').value;
-  var conta=contaById(contaId);
-  var desc=(document.getElementById('fin-desc').value||'').trim();
-  var proc=document.getElementById('fin-proc')?document.getElementById('fin-proc').value:'';
-  var cat=(document.getElementById('fin-cat').value||'').trim();
-  var obs=(document.getElementById('fin-obs').value||'').trim();
-  if(!data||!valor||!desc||!conta){alert('Preencha Data, Valor, Descrição e Conta.');return;}
+
+// ───────── Contas ─────────
+function finViewContasVazio(){
+  return '<div class="card" style="text-align:center;padding:36px 20px"><div style="font-size:16px;font-weight:700;margin-bottom:6px">Nenhuma conta cadastrada</div>'+
+    '<div style="color:var(--mt);font-size:13px;margin-bottom:16px">As contas são a base do financeiro: todo lançamento sai ou entra em uma conta.</div>'+
+    '<button class="btn bp" onclick="finSeedContas()">Cadastrar as 4 contas padrão</button> <button class="btn" onclick="finSetTab(\'contas\');finModalConta(null)">Cadastrar uma conta</button></div>';
+}
+function finViewContas(){
+  var lista=S.contas||[];
+  if(!lista.length) return finViewContasVazio();
+  var cs=contaSaldos();
+  var grupo=function(tp,tit){
+    var cx=lista.filter(function(c){return c.tipo===tp;}); if(!cx.length) return '';
+    return '<div class="st">'+tit+'</div><div class="card" style="padding:0;overflow-x:auto"><table class="tbl"><thead><tr><th>Conta</th><th>Banco</th><th>Titular</th><th>Empresa</th><th class="r">Saldo atual</th><th class="r">A receber</th><th class="r">A pagar</th><th></th></tr></thead><tbody>'+
+      cx.map(function(c){ var x=cs[c.id];
+        return '<tr'+(c.ativa===false?' style="opacity:.55"':'')+'><td><strong>'+esc(c.nome)+'</strong>'+(c.ativa===false?' <span class="badge" style="background:var(--row-alt);color:var(--mt)">Inativa</span>':'')+'</td><td>'+esc(c.banco)+(c.agencia?' · ag. '+esc(c.agencia):'')+' · '+esc(c.conta)+'</td><td>'+esc(c.titular||'')+'</td><td>'+esc(c.entidade)+'</td><td class="r"><strong>'+fmt(x.saldo)+'</strong></td><td class="r">'+fmt(x.prevEnt)+'</td><td class="r">'+fmt(x.prevSai)+'</td>'+
+        '<td style="white-space:nowrap"><button class="btn" style="font-size:11px;padding:3px 9px" onclick="finAbrirExtrato(\''+c.id+'\')">Extrato</button> <button class="btn" style="font-size:11px;padding:3px 9px" onclick="finModalConta(\''+c.id+'\')">Editar</button></td></tr>'; }).join('')+'</tbody></table></div>';
+  };
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="color:var(--mt);font-size:13px">Cadastro e extrato das contas bancárias.</div><button class="btn bp" style="font-size:12px" onclick="finModalConta(null)">+ Nova conta</button></div>'+
+    grupo('operacional','Contas operacionais')+grupo('vinculada','Contas vinculadas ao fundo (trânsito)');
+}
+async function finSeedContas(){
   try{
-    await upsertLancamento({tipo:tipo,entidade:conta.entidade,conta:conta.id,data:data,valor:valor,banco:conta.label,descricao:desc,processoId:proc,categoria:cat,obs:obs});
-    S.financeiro=await fetchCollection('lancamentos');
-    showToast('Lançamento salvo!');
-    navigate('financeiro');
+    for(var i=0;i<FIN_CONTAS_PADRAO.length;i++){ await upsertConta(Object.assign({ativa:true,saldoInicial:0,dataSaldoInicial:''},FIN_CONTAS_PADRAO[i])); }
+    S.contas=await fetchCollection('contas'); _finTab='contas'; showToast('Contas cadastradas.'); navigate('financeiro');
   }catch(e){ showToast('Erro: '+(e.code||e.message)); }
 }
-async function deleteFin(id){if(!isFullAccess(currentUser)){showToast("Apenas o administrador pode excluir.");return;}if(!confirm('Excluir lançamento?'))return;
+function finModalConta(id){
+  var c=(id?contaById(id):null)||{ativa:true,tipo:'operacional',entidade:'PBL'};
+  var opt=function(arr,sel){ return arr.map(function(a){return '<option value="'+a[0]+'"'+(a[0]===sel?' selected':'')+'>'+a[1]+'</option>';}).join(''); };
+  showModal('<button class="modal-close" onclick="closeModal()">×</button><div class="modal-title">'+(id?'Editar conta':'Nova conta')+'</div>'+
+    '<div class="g2" style="margin-bottom:10px"><div class="fg"><label>Nome da conta *</label><input id="fc-nome" value="'+esc(c.nome||'')+'" placeholder="Ex: PBL Originadora"/></div><div class="fg"><label>Titular</label><input id="fc-titular" value="'+esc(c.titular||'')+'"/></div></div>'+
+    '<div class="g3" style="margin-bottom:10px"><div class="fg"><label>Banco *</label><input id="fc-banco" value="'+esc(c.banco||'')+'"/></div><div class="fg"><label>Agência</label><input id="fc-ag" value="'+esc(c.agencia||'')+'"/></div><div class="fg"><label>Conta *</label><input id="fc-conta" value="'+esc(c.conta||'')+'"/></div></div>'+
+    '<div class="g2" style="margin-bottom:10px"><div class="fg"><label>Empresa *</label><select id="fc-ent">'+opt(FIN_EMPRESAS.map(function(e){return [e,e];}),c.entidade)+'</select></div>'+
+    '<div class="fg"><label>Tipo *</label><select id="fc-tipo">'+opt([['operacional','Operacional (dia a dia)'],['vinculada','Vinculada ao fundo (trânsito)']],c.tipo)+'</select></div></div>'+
+    '<div class="g3" style="margin-bottom:14px"><div class="fg"><label>Saldo inicial (R$)</label><input id="fc-si" type="number" step="0.01" value="'+(c.saldoInicial||0)+'"/></div><div class="fg"><label>Data do saldo inicial</label><input id="fc-dsi" type="date" value="'+esc(c.dataSaldoInicial||'')+'"/></div>'+
+    '<div class="fg"><label>Situação</label><select id="fc-ativa">'+opt([['1','Ativa'],['0','Inativa']],c.ativa===false?'0':'1')+'</select></div></div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:10px"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn bp" onclick="finSalvarConta('+(id?'\''+id+'\'':'null')+')">Salvar</button></div>');
+}
+async function finSalvarConta(id){
+  var g=function(k){return (document.getElementById(k).value||'').trim();};
+  if(!g('fc-nome')||!g('fc-banco')||!g('fc-conta')){ alert('Preencha Nome, Banco e Conta.'); return; }
+  var old=(id?contaById(id):null)||{};
   try{
-    await deleteLancamento(id);
-    S.financeiro=await fetchCollection('lancamentos');
-    showToast('Excluído!');
-    navigate('financeiro');
+    await upsertConta(Object.assign({},old,{id:id||undefined,nome:g('fc-nome'),titular:g('fc-titular'),banco:g('fc-banco'),agencia:g('fc-ag'),conta:g('fc-conta'),entidade:g('fc-ent'),tipo:g('fc-tipo'),saldoInicial:parseFloat(g('fc-si'))||0,dataSaldoInicial:g('fc-dsi'),ativa:g('fc-ativa')==='1'}));
+    S.contas=await fetchCollection('contas'); closeModal(); showToast('Conta salva.'); navigate('financeiro');
   }catch(e){ showToast('Erro: '+(e.code||e.message)); }
 }
-function filterFin(){
-  var tipo=document.getElementById('fin-tf').value;
-  var di=document.getElementById('fin-di').value;
-  var df=document.getElementById('fin-df').value;
-  var q=(document.getElementById('fin-q').value||'').toLowerCase();
-  var cf=document.getElementById('fin-cf').value;
-  var rows=S.financeiro.filter(function(f){
-    return(tipo==='todos'||f.tipo===tipo)&&(!cf||f.conta===cf)&&(!di||f.data>=di)&&(!df||f.data<=df)&&(!q||(f.descricao||'').toLowerCase().includes(q)||(f.obs||'').toLowerCase().includes(q));
-  }).slice().sort(function(a,b){return(b.data||'').localeCompare(a.data||'');}).map(finRowHTML).join('');
-  document.getElementById('fin-tbody').innerHTML=rows||'<tr><td colspan="9" class="empty">Nenhum resultado.</td></tr>';
+
+// ───────── Extrato da conta ─────────
+function finAbrirExtrato(id){ _finTab='contas'; _finConta=id; _finExtDi=''; _finExtDf=''; navigate('financeiro'); }
+function finExtFiltro(){ _finExtDi=document.getElementById('fe-di').value; _finExtDf=document.getElementById('fe-df').value; navigate('financeiro'); }
+function finViewExtrato(){
+  var c=contaById(_finConta); if(!c){ _finConta=''; return finViewContas(); }
+  var di=_finExtDi, df=_finExtDf;
+  var mov=(S.financeiro||[]).filter(function(f){ return f.conta===c.id && finStatus(f)==='pago' && (!c.dataSaldoInicial||finData(f)>=c.dataSaldoInicial); })
+    .sort(function(a,b){ return finData(a).localeCompare(finData(b)); });
+  var saldo=Number(c.saldoInicial)||0, abertura=null, ent=0, sai=0, rows='';
+  mov.forEach(function(f){
+    var v=Number(f.valor)||0, e=finSentido(f)==='entrada', d=finData(f);
+    if(di && d<di){ saldo+=e?v:-v; return; }
+    if(abertura===null) abertura=saldo;
+    if(df && d>df) return;
+    saldo+=e?v:-v; if(e)ent+=v; else sai+=v;
+    rows+='<tr><td>'+fmtDate(d)+'</td><td>'+esc(f.descricao)+(f.contraparte?' <span style="color:var(--mt);font-size:11px">· '+esc(f.contraparte)+'</span>':'')+'</td><td>'+esc(f.categoria||'')+'</td><td class="r" style="color:#1D6B3A">'+(e?fmt(v):'')+'</td><td class="r" style="color:var(--red)">'+(e?'':fmt(v))+'</td><td class="r"><strong>'+fmt(saldo)+'</strong></td></tr>';
+  });
+  if(abertura===null) abertura=saldo;
+  var prev=(S.financeiro||[]).filter(function(f){return f.conta===c.id && finStatus(f)==='previsto';}).sort(function(a,b){return (a.vencimento||'').localeCompare(b.vencimento||'');});
+  var prevRows=prev.map(function(f){ return '<tr><td>'+fmtDate(f.vencimento||f.data)+'</td><td>'+esc(f.descricao)+'</td><td>'+finStatusBadge(f)+'</td><td class="r" style="color:'+(finSentido(f)==='entrada'?'#1D6B3A':'var(--red)')+'">'+fmt(f.valor)+'</td><td><button class="btn" style="font-size:11px;padding:3px 9px" onclick="finModalBaixar(\''+f.id+'\')">Dar baixa</button></td></tr>'; }).join('');
+  return '<div style="margin-bottom:12px"><button class="btn" style="font-size:12px" onclick="_finConta=\'\';navigate(\'financeiro\')">← Contas</button></div>'+
+    '<div class="card" style="margin-bottom:14px"><div style="font-size:16px;font-weight:700">'+esc(c.nome)+'</div><div style="color:var(--mt);font-size:13px">'+esc(c.banco)+(c.agencia?' · ag. '+esc(c.agencia):'')+' · conta '+esc(c.conta)+' · '+esc(c.titular||'')+' · '+esc(c.entidade)+' · '+(c.tipo==='vinculada'?'vinculada ao fundo':'operacional')+'</div></div>'+
+    '<div class="metrics"><div class="mc"><div class="ml">Saldo inicial do período</div><div class="mv">'+fmt(abertura)+'</div></div><div class="mc green"><div class="ml">Entradas</div><div class="mv green">'+fmt(ent)+'</div></div><div class="mc red"><div class="ml">Saídas</div><div class="mv red">'+fmt(sai)+'</div></div><div class="mc blue"><div class="ml">Saldo final</div><div class="mv blue">'+fmt(abertura+ent-sai)+'</div></div></div>'+
+    '<div class="filter-bar no-print"><div class="fg"><label>Data início</label><input type="date" id="fe-di" value="'+esc(di)+'" onchange="finExtFiltro()"/></div><div class="fg"><label>Data fim</label><input type="date" id="fe-df" value="'+esc(df)+'" onchange="finExtFiltro()"/></div><button class="print-btn" onclick="window.print()">Imprimir</button></div>'+
+    '<div class="card" style="padding:0;overflow-x:auto"><table class="tbl"><thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="r">Entrada</th><th class="r">Saída</th><th class="r">Saldo</th></tr></thead><tbody>'+
+    '<tr style="background:var(--row-alt)"><td colspan="5"><em>Saldo inicial</em></td><td class="r"><strong>'+fmt(abertura)+'</strong></td></tr>'+(rows||'<tr><td colspan="6" class="empty">Nenhuma movimentação no período.</td></tr>')+'</tbody></table></div>'+
+    (prev.length?'<div class="st">Previstos nesta conta</div><div class="card" style="padding:0;overflow-x:auto"><table class="tbl"><thead><tr><th>Vencimento</th><th>Descrição</th><th>Situação</th><th class="r">Valor</th><th></th></tr></thead><tbody>'+prevRows+'</tbody></table></div>':'');
+}
+
+// ───────── Lançamentos ─────────
+function finLancFiltrados(){
+  var F=_finF, q=(F.q||'').toLowerCase();
+  return (S.financeiro||[]).filter(function(f){
+    var st=finStatus(f), v=F.vis;
+    if(v==='todos'&&st==='cancelado') return false;
+    if(v==='receber'&&!(f.tipo==='venda'&&st==='previsto')) return false;
+    if(v==='pagar'&&!(st==='previsto'&&(f.tipo==='compra'||f.tipo==='despesa'||f.tipo==='repasse'))) return false;
+    if(v==='transf'&&f.tipo!=='transferencia') return false;
+    if(v==='repasse'&&f.tipo!=='repasse') return false;
+    if(v==='realizados'&&st!=='pago') return false;
+    if(v==='cancelados'&&st!=='cancelado') return false;
+    if(F.conta&&f.conta!==F.conta) return false;
+    var d=finData(f); if(F.di&&d<F.di) return false; if(F.df&&d>F.df) return false;
+    if(q&&!((f.descricao||'')+' '+(f.contraparte||'')+' '+(f.obs||'')).toLowerCase().includes(q)) return false;
+    return true;
+  }).sort(function(a,b){ return finData(b).localeCompare(finData(a)); });
+}
+function finLancRow(f){
+  var st=finStatus(f), ent=finSentido(f)==='entrada';
+  var proc=f.processoId?(S.processos.find(function(p){return p.id===f.processoId;})||{numero:'—'}).numero:'';
+  var acoes='';
+  if(st==='previsto') acoes+='<button class="btn" style="font-size:11px;padding:3px 8px" onclick="finModalBaixar(\''+f.id+'\')">Dar baixa</button> ';
+  if(st==='previsto'&&f.tipo!=='transferencia') acoes+='<button class="btn" style="font-size:11px;padding:3px 8px" onclick="finModalLanc(\''+f.id+'\')">Editar</button> ';
+  if(st!=='cancelado') acoes+='<button class="btn" style="font-size:11px;padding:3px 8px" onclick="finCancelar(\''+f.id+'\')">'+(st==='pago'?'Estornar':'Cancelar')+'</button>';
+  return '<tr'+(st==='cancelado'?' style="opacity:.5"':'')+'><td>'+fmtDate(f.vencimento||f.data)+(st==='pago'&&f.dataBaixa&&f.dataBaixa!==f.vencimento?'<div style="font-size:10px;color:var(--mt)">baixa '+fmtDate(f.dataBaixa)+'</div>':'')+'</td><td>'+finTipoBadge(f)+'</td><td>'+esc(f.descricao)+(f.contraparte?'<div style="font-size:11px;color:var(--mt)">'+esc(f.contraparte)+'</div>':'')+(st==='cancelado'&&f.motivoCancelamento?'<div style="font-size:11px;color:var(--mt)">Motivo: '+esc(f.motivoCancelamento)+'</div>':'')+'</td><td style="font-size:11px">'+esc(proc||'—')+'</td><td>'+esc(finContaNome(f))+'</td><td>'+esc(f.categoria||'')+'</td><td class="r" style="color:'+(ent?'#1D6B3A':'var(--red)')+'"><strong>'+(ent?'':'− ')+fmt(f.valor)+'</strong></td><td>'+finStatusBadge(f)+'</td><td style="white-space:nowrap">'+acoes+'</td></tr>';
+}
+function finLancTabela(){
+  var l=finLancFiltrados();
+  var e=0,s=0; l.forEach(function(f){ if(finStatus(f)==='cancelado'||f.tipo==='transferencia')return; if(finSentido(f)==='entrada')e+=Number(f.valor)||0; else s+=Number(f.valor)||0; });
+  return {rows:l.map(finLancRow).join('')||'<tr><td colspan="9" class="empty">Nenhum lançamento encontrado.</td></tr>',resumo:l.length+' lançamento'+(l.length===1?'':'s')+' · entradas '+fmt(e)+' · saídas '+fmt(s)+' <span style="color:var(--mt)">(transferências não somam)</span>'};
+}
+function finSetVis(v){ _finF.vis=v; navigate('financeiro'); }
+function finFiltrar(){
+  _finF.conta=document.getElementById('fl-f-conta').value; _finF.di=document.getElementById('fl-f-di').value; _finF.df=document.getElementById('fl-f-df').value; _finF.q=document.getElementById('fl-f-q').value;
+  var t=finLancTabela(); document.getElementById('fl-tbody').innerHTML=t.rows; document.getElementById('fl-resumo').innerHTML=t.resumo;
+}
+function finViewLanc(){
+  if(!(S.contas||[]).length) return finViewContasVazio();
+  var chips=[['todos','Todos'],['receber','A receber'],['pagar','A pagar'],['transf','Transferências'],['repasse','Repasses'],['realizados','Realizados'],['cancelados','Cancelados']];
+  var t=finLancTabela();
+  var contaOpts=(S.contas||[]).map(function(c){return '<option value="'+c.id+'"'+(_finF.conta===c.id?' selected':'')+'>'+esc(c.nome)+'</option>';}).join('');
+  return finAvisoSemConta()+
+    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px"><div style="display:flex;gap:6px;flex-wrap:wrap">'+chips.map(function(c){ var on=_finF.vis===c[0]; return '<button class="btn'+(on?' bp':'')+'" style="font-size:12px;padding:5px 12px" onclick="finSetVis(\''+c[0]+'\')">'+c[1]+'</button>'; }).join('')+'</div>'+
+    '<button class="btn bp" style="font-size:12px" onclick="finModalLanc(null)">+ Novo lançamento</button></div>'+
+    '<div class="filter-bar no-print"><div class="fg" style="max-width:220px"><label>Conta</label><select id="fl-f-conta" onchange="finFiltrar()"><option value="">Todas</option>'+contaOpts+'</select></div>'+
+    '<div class="fg"><label>De</label><input type="date" id="fl-f-di" value="'+esc(_finF.di)+'" onchange="finFiltrar()"/></div><div class="fg"><label>Até</label><input type="date" id="fl-f-df" value="'+esc(_finF.df)+'" onchange="finFiltrar()"/></div>'+
+    '<input class="search-input" id="fl-f-q" value="'+esc(_finF.q)+'" placeholder="Buscar descrição, contraparte, observação..." oninput="finFiltrar()"/><button class="print-btn" onclick="window.print()">Imprimir</button></div>'+
+    '<div id="fl-resumo" style="font-size:12px;margin:0 0 8px 2px">'+t.resumo+'</div>'+
+    '<div class="card" style="padding:0;overflow-x:auto"><table class="tbl"><thead><tr><th>Vencimento</th><th>Tipo</th><th>Descrição</th><th>Processo</th><th>Conta</th><th>Categoria</th><th class="r">Valor</th><th>Situação</th><th>Ação</th></tr></thead><tbody id="fl-tbody">'+t.rows+'</tbody></table></div>';
+}
+
+// ───────── Novo / editar lançamento ─────────
+function finContasOpts(sel,soVinculadas){
+  return (S.contas||[]).filter(function(c){ return (c.ativa!==false||c.id===sel) && (!soVinculadas||c.tipo==='vinculada'); })
+    .map(function(c){return '<option value="'+c.id+'"'+(c.id===sel?' selected':'')+'>'+esc(c.nome)+' — '+esc(c.banco)+' '+esc(c.conta)+'</option>';}).join('');
+}
+function finModalLanc(id){
+  if(!(S.contas||[]).length){ showToast('Cadastre as contas primeiro.'); _finTab='contas'; navigate('financeiro'); return; }
+  var f=(id?(S.financeiro||[]).find(function(x){return x.id===id;}):null)||{};
+  var tipo=f.tipo||'despesa', pago=id?finStatus(f)==='pago':false;
+  var procOpts=(S.processos||[]).map(function(p){return '<option value="'+p.id+'"'+(p.id===f.processoId?' selected':'')+'>'+esc(p.numero)+' — '+esc(p.cliente)+'</option>';}).join('');
+  var contrapartes=Array.from(new Set((S.financeiro||[]).map(function(x){return x.contraparte;}).filter(Boolean)));
+  var tipoOpts=Object.keys(FIN_TIPO_LBL).map(function(k){return '<option value="'+k+'"'+(k===tipo?' selected':'')+'>'+FIN_TIPO_LBL[k]+'</option>';}).join('');
+  var blk=function(t){ return '<div class="st" style="margin:14px 0 8px">'+t+'</div>'; };
+  showModal('<button class="modal-close" onclick="closeModal()">×</button><div class="modal-title">'+(id?'Editar lançamento':'Novo lançamento')+'</div>'+
+    blk('O quê')+
+    '<div class="g2" style="margin-bottom:10px"><div class="fg"><label>Tipo *</label><select id="fl-tipo" onchange="finLancTipoChange()"'+(id?' disabled':'')+'>'+tipoOpts+'</select></div><div class="fg" style="grid-column:span 1"><label>Descrição *</label><input id="fl-desc" value="'+esc(f.descricao||'')+'" placeholder="Ex: Custas de cartório — proc. 0848128"/></div></div>'+
+    '<div class="g2" style="margin-bottom:6px"><div class="fg" id="fl-g-contra"><label>Contraparte (quem paga / recebe)</label><input id="fl-contra" list="fl-contra-list" value="'+esc(f.contraparte||'')+'"/><datalist id="fl-contra-list">'+contrapartes.map(function(c){return '<option value="'+esc(c)+'">';}).join('')+'</datalist></div>'+
+    '<div class="fg" id="fl-g-proc"><label>Processo vinculado</label><select id="fl-proc"><option value="">Nenhum</option>'+procOpts+'</select></div></div>'+
+    blk('Quanto e quando')+
+    '<div class="g4" style="margin-bottom:6px"><div class="fg"><label>Valor (R$) *</label><input id="fl-valor" type="number" min="0" step="0.01" value="'+(f.valor||'')+'"/></div><div class="fg"><label>Competência</label><input id="fl-comp" type="month" value="'+esc(f.competencia||todayStr().slice(0,7))+'"/></div><div class="fg" id="fl-g-venc"><label>Vencimento *</label><input id="fl-venc" type="date" value="'+esc(f.vencimento||f.data||todayStr())+'"/></div><div class="fg" id="fl-g-parc"><label>Parcelas</label><input id="fl-parc" type="number" min="1" max="60" value="1"'+(id?' disabled':'')+'/></div></div>'+
+    blk('Classificação e conta')+
+    '<div class="g2" style="margin-bottom:6px"><div class="fg"><label>Categoria</label><select id="fl-cat"></select></div><div class="fg"><label>Forma</label><select id="fl-forma">'+FIN_FORMAS.map(function(x){return '<option'+(x===f.forma?' selected':'')+'>'+x+'</option>';}).join('')+'</select></div></div>'+
+    '<div class="g2" style="margin-bottom:6px"><div class="fg"><label id="fl-lbl-conta">Conta *</label><select id="fl-conta"></select></div><div class="fg" id="fl-g-dest"><label>Conta de destino *</label><select id="fl-dest"><option value="">Selecione…</option>'+finContasOpts('')+'</select></div></div>'+
+    '<div id="fl-repasse-note" style="display:none;font-size:12px;color:var(--mt);margin-bottom:6px">Destino do repasse: conta principal do fundo (não controlada aqui). A saída só pode partir de uma conta vinculada.</div>'+
+    blk('Situação')+
+    '<div class="g3" style="margin-bottom:6px"><div class="fg" style="justify-content:flex-end"><label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0"><input type="checkbox" id="fl-pago" onchange="finLancPagoChange()"'+(pago?' checked':'')+'/> Já foi pago/recebido</label></div><div class="fg" id="fl-g-baixa"><label>Data da baixa</label><input id="fl-baixa" type="date" value="'+esc(f.dataBaixa||todayStr())+'"/></div></div>'+
+    '<div class="fg" style="margin:10px 0 14px"><label>Observação</label><input id="fl-obs" value="'+esc(f.obs||'')+'"/></div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:10px"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn bp" onclick="finSalvarLanc('+(id?'\''+id+'\'':'null')+')">Salvar</button></div>',{wide:true});
+  window._finEditConta=f.conta||''; window._finEditCat=f.categoria||'';
+  finLancTipoChange(); finLancPagoChange();
+}
+function finLancTipoChange(){
+  var t=document.getElementById('fl-tipo').value, el=function(i){return document.getElementById(i);};
+  var cat=el('fl-cat'), selCat=cat.value||window._finEditCat||'';
+  cat.innerHTML=FIN_CATS[t].map(function(x){return '<option'+(x===selCat?' selected':'')+'>'+x+'</option>';}).join('');
+  var cs=el('fl-conta'), selC=cs.value||window._finEditConta||'';
+  cs.innerHTML=(t==='repasse'?'':'<option value="">Selecione…</option>')+finContasOpts(selC,t==='repasse');
+  var show=function(i,on){ el(i).style.display=on?'':'none'; };
+  show('fl-g-contra',t!=='transferencia'); show('fl-g-proc',t!=='transferencia'&&t!=='repasse'); show('fl-g-dest',t==='transferencia'); show('fl-repasse-note',t==='repasse');
+  el('fl-lbl-conta').textContent=(t==='transferencia'||t==='repasse')?'Conta de origem *':'Conta *';
+  finLancPagoChange();
+}
+function finLancPagoChange(){
+  var pago=document.getElementById('fl-pago').checked, t=document.getElementById('fl-tipo').value;
+  document.getElementById('fl-g-baixa').style.display=pago?'':'none';
+  var parc=document.getElementById('fl-g-parc'); parc.style.display=(pago||t==='transferencia'||t==='repasse')?'none':'';
+}
+async function finSalvarLanc(id){
+  var g=function(k){var e=document.getElementById(k);return e?(e.value||'').trim():'';};
+  var tipo=id?(S.financeiro.find(function(x){return x.id===id;})||{}).tipo:g('fl-tipo');
+  var valor=parseFloat(g('fl-valor'))||0, pago=document.getElementById('fl-pago').checked, venc=g('fl-venc'), baixa=pago?g('fl-baixa'):'';
+  var conta=contaById(g('fl-conta')), dest=tipo==='transferencia'?contaById(g('fl-dest')):null;
+  if(!g('fl-desc')||valor<=0||!conta){ alert('Preencha Descrição, Valor e Conta.'); return; }
+  if(!venc&&!baixa){ alert('Informe o vencimento.'); return; }
+  if(pago&&!baixa){ alert('Informe a data da baixa.'); return; }
+  if(tipo==='transferencia'&&(!dest||dest.id===conta.id)){ alert('Escolha uma conta de destino diferente da origem.'); return; }
+  if(tipo==='repasse'&&conta.tipo!=='vinculada'){ alert('O repasse ao fundo sai de uma conta vinculada.'); return; }
+  var base={tipo:tipo,descricao:g('fl-desc'),valor:valor,contraparte:tipo==='transferencia'?'':g('fl-contra'),processoId:(tipo==='transferencia'||tipo==='repasse')?'':g('fl-proc'),categoria:g('fl-cat'),forma:g('fl-forma'),obs:g('fl-obs'),
+    competencia:g('fl-comp')||(venc||baixa).slice(0,7),vencimento:venc||baixa,status:pago?'pago':'previsto',dataBaixa:baixa,data:baixa||venc};
+  var porConta=function(c,extra){ return Object.assign({},base,{conta:c.id,entidade:c.entidade,banco:c.nome},extra||{}); };
+  var parcelas=(!id&&!pago&&tipo!=='transferencia'&&tipo!=='repasse')?Math.max(1,Math.min(60,parseInt(g('fl-parc'),10)||1)):1;
+  try{
+    if(id){
+      var old=S.financeiro.find(function(x){return x.id===id;});
+      await upsertLancamento(Object.assign({},old,porConta(conta),{id:id}));
+    } else if(tipo==='transferencia'){
+      var grupo=finNovoId('lancamentos');
+      await upsertLancamento(porConta(conta,{sentido:'saida',grupoId:grupo,descricao:base.descricao+' → '+dest.nome}));
+      await upsertLancamento(porConta(dest,{sentido:'entrada',grupoId:grupo,descricao:base.descricao+' ← '+conta.nome}));
+    } else if(parcelas>1){
+      var total=Math.round(valor*100), cada=Math.floor(total/parcelas), d0=new Date(venc+'T00:00:00');
+      for(var i=0;i<parcelas;i++){
+        var d=new Date(d0.getFullYear(),d0.getMonth()+i,d0.getDate()); if(d.getDate()!==d0.getDate()) d=new Date(d0.getFullYear(),d0.getMonth()+i+1,0);
+        var ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+        var v=(i===parcelas-1?total-cada*(parcelas-1):cada)/100;
+        await upsertLancamento(porConta(conta,{valor:v,vencimento:ds,data:ds,competencia:ds.slice(0,7),descricao:base.descricao+' ('+(i+1)+'/'+parcelas+')',parcela:(i+1)+'/'+parcelas}));
+      }
+    } else { await upsertLancamento(porConta(conta)); }
+    S.financeiro=await fetchCollection('lancamentos'); closeModal(); showToast('Lançamento salvo.'); navigate('financeiro');
+  }catch(e){ showToast('Erro: '+(e.code||e.message)); }
+}
+
+// ───────── Baixa e cancelamento ─────────
+function finModalBaixar(id){
+  var f=(S.financeiro||[]).find(function(x){return x.id===id;}); if(!f) return;
+  var ent=finSentido(f)==='entrada';
+  showModal('<button class="modal-close" onclick="closeModal()">×</button><div class="modal-title">Dar baixa — '+(ent?'recebimento':'pagamento')+'</div>'+
+    '<div style="font-size:13px;color:var(--mt);margin-bottom:12px">'+esc(f.descricao)+' · vencimento '+fmtDate(f.vencimento||f.data)+'</div>'+
+    '<div class="g3" style="margin-bottom:14px"><div class="fg"><label>Data da baixa *</label><input id="fb-data" type="date" value="'+todayStr()+'"/></div><div class="fg"><label>Valor efetivo (R$) *</label><input id="fb-valor" type="number" step="0.01" min="0" value="'+(Number(f.valor)||0)+'"/></div><div class="fg"><label>Conta *</label><select id="fb-conta">'+finContasOpts(f.conta)+'</select></div></div>'+
+    '<div style="display:flex;justify-content:flex-end;gap:10px"><button class="btn" onclick="closeModal()">Cancelar</button><button class="btn bp" onclick="finConfirmarBaixa(\''+id+'\')">Confirmar baixa</button></div>');
+}
+async function finConfirmarBaixa(id){
+  var f=(S.financeiro||[]).find(function(x){return x.id===id;}); if(!f) return;
+  var data=document.getElementById('fb-data').value, valor=parseFloat(document.getElementById('fb-valor').value)||0, c=contaById(document.getElementById('fb-conta').value);
+  if(!data||valor<=0||!c){ alert('Preencha data, valor e conta.'); return; }
+  try{
+    var upd=Object.assign({},f,{status:'pago',dataBaixa:data,data:data,valor:valor,conta:c.id,entidade:c.entidade,banco:c.nome});
+    if(valor!==(Number(f.valor)||0)) upd.valorOriginal=Number(f.valorOriginal!=null?f.valorOriginal:f.valor)||0;
+    await upsertLancamento(upd);
+    S.financeiro=await fetchCollection('lancamentos'); closeModal(); showToast('Baixa registrada.'); navigate('financeiro');
+  }catch(e){ showToast('Erro: '+(e.code||e.message)); }
+}
+async function finCancelar(id){
+  var f=(S.financeiro||[]).find(function(x){return x.id===id;}); if(!f) return;
+  var pago=finStatus(f)==='pago';
+  var motivo=prompt((pago?'Estornar':'Cancelar')+' este lançamento. Informe o motivo:'); if(motivo===null) return;
+  if(!motivo.trim()){ alert('O motivo é obrigatório.'); return; }
+  var alvos=f.grupoId?(S.financeiro||[]).filter(function(x){return x.grupoId===f.grupoId;}):[f];
+  try{
+    for(var i=0;i<alvos.length;i++){ await upsertLancamento(Object.assign({},alvos[i],{status:'cancelado',motivoCancelamento:motivo.trim(),canceladoEm:todayStr(),canceladoPor:currentUser.id,statusAnterior:finStatus(alvos[i])})); }
+    S.financeiro=await fetchCollection('lancamentos'); showToast(pago?'Lançamento estornado.':'Lançamento cancelado.'); navigate('financeiro');
+  }catch(e){ showToast('Erro: '+(e.code||e.message)); }
 }
 
 // ════════════════════════════════════════════════════════════
@@ -8650,7 +8883,7 @@ function pageFluxoCaixa(){
   // agrupar por mês
   var byMes={};
   S.financeiro.forEach(function(f){
-    if(!f.data)return;
+    if(!f.data||!finRealizado(f))return;
     var mes=f.data.slice(0,7);
     if(!byMes[mes])byMes[mes]={entradas:0,saidas:0,items:[]};
     if(f.tipo==='venda')byMes[mes].entradas+=f.valor||0;
@@ -8690,7 +8923,7 @@ function pageFluxoCaixa(){
   :'<div class="card"><div class="empty">Nenhum lançamento registrado ainda. Acesse Financeiro para registrar compras, vendas e despesas.</div></div>');
 }
 function detalharMes(mes){
-  var items=S.financeiro.filter(function(f){return f.data&&f.data.startsWith(mes);}).sort(function(a,b){return(a.data||'').localeCompare(b.data||'');});
+  var items=S.financeiro.filter(function(f){return f.data&&f.data.startsWith(mes)&&finRealizado(f);}).sort(function(a,b){return(a.data||'').localeCompare(b.data||'');});
   var dt=new Date(mes+'-02');var label=dt.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
   var rows=items.map(function(f){
     var tb=finTipoBadge(f);
