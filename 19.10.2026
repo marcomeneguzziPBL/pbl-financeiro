@@ -1008,6 +1008,46 @@ function finCaixasDaConta(cid){
   });
 }
 function finCaixaDe(cid){ return finCaixasDaConta(cid)[0]||null; }   /* o fechamento mais recente */
+/* Fechamento "a refazer": o saldo do sistema naquele dia não é mais o que foi conferido, porque depois entrou,
+   mudou ou saiu um lançamento com data igual ou anterior (o saldo é acumulado). Fechar o dia de novo resolve. */
+function finCaixaMudou(r){
+  var c=r&&finCadById('contas',r.contaId); if(!c||finExterna(c)||r.data<finContaDataIni(c)) return false;
+  return Math.abs(finSaldoConta(c,r.data)-(Number(r.saldoSistema)||0))>=0.005;
+}
+/* Todos os fechamentos a refazer (de uma conta ou de todas), numa passada só pelos lançamentos. */
+function finCaixasARefazer(cid){
+  var por={}, out=[];
+  (S.finCaixa||[]).forEach(function(r){ if(!cid||r.contaId===cid) (por[r.contaId]=por[r.contaId]||[]).push(r); });
+  Object.keys(por).forEach(function(id){
+    var c=finCadById('contas',id); if(!c||finExterna(c)) return;
+    var ini=finContaDataIni(c), regs=por[id].filter(function(r){ return r.data>=ini; }).sort(function(a,b){ return a.data<b.data?-1:(a.data>b.data?1:0); });
+    if(!regs.length) return;
+    var mov=regs.map(function(){ return 0; });
+    (S.financeiro||[]).forEach(function(f){
+      var d=f.data||''; if(f.contaId!==id||d<ini) return;
+      var lo=0, hi=regs.length; while(lo<hi){ var m=(lo+hi)>>1; if(regs[m].data<d) lo=m+1; else hi=m; }   /* 1º fechamento com data >= d */
+      if(lo<regs.length){ var v=Number(f.valor)||0; mov[lo]+=finEntraSaldo(f)?v:-v; }
+    });
+    var saldo=Number(c.saldoInicial)||0;
+    regs.forEach(function(r,i){ saldo+=mov[i]; if(Math.abs(saldo-(Number(r.saldoSistema)||0))>=0.005) out.push(r); });
+  });
+  return out;
+}
+/* Quais fechamentos passam a ficar a refazer se a lista de lançamentos virar `nova` (os que já estavam não contam). */
+function finFechAfetados(nova){
+  var ja={}, antes=S.financeiro, res;
+  finCaixasARefazer().forEach(function(r){ ja[r.id]=1; });
+  S.financeiro=nova;
+  try{ res=finCaixasARefazer().filter(function(r){ return !ja[r.id]; }); } finally{ S.financeiro=antes; }
+  return res.sort(function(a,b){ return a.data<b.data?-1:(a.data>b.data?1:0); });
+}
+/* Aviso para os diálogos: "estes fechamentos vão ficar a refazer". */
+function finFechAvisoHtml(afet){
+  if(!afet||!afet.length) return '';
+  var nomes=afet.slice(0,5).map(function(r){ return esc(finCadNome('contas',r.contaId))+' em '+fmtDate(r.data); });
+  return '<span class="fin-dlg-alerta">'+(afet.length===1?'Isto muda o saldo de um dia com caixa já fechado: ':'Isto muda o saldo de '+afet.length+' dias com caixa já fechado: ')+
+    nomes.join('; ')+(afet.length>5?' e mais '+(afet.length-5):'')+'. '+(afet.length===1?'O fechamento fica marcado':'Os fechamentos ficam marcados')+' como <strong>a refazer</strong> no Fechar caixa.</span>';
+}
 
 /* Quem já tinha transferência no formato antigo (uma só linha, com origem e destino) ganha as duas pontas, cada uma na sua conta. */
 async function finMigraTransfAntigas(){
@@ -1060,7 +1100,8 @@ function applyStoredTheme(){
 // Retorna array de meses (YYYY-MM) que compoem o periodo atual.
 // Usado para iterar comissoes mes-a-mes em modo ano/custom.
 function fmtDate(d){if(!d)return'—';var dt=new Date(d+'T00:00:00');if(isNaN(dt))return d;return dt.toLocaleDateString('pt-BR');}
-function todayStr(){return new Date().toISOString().slice(0,10);}
+/* Data de hoje no fuso do computador. toISOString é UTC: no Brasil, a partir das 21h já dava o dia seguinte. */
+function todayStr(){var d=new Date();return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
 async function fetchCollection(name){
   var snap=await fb.getDocs(fb.collection(fb.db,name));
   return snap.docs.map(function(d){return Object.assign({id:d.id}, d.data());});
@@ -1831,7 +1872,8 @@ function finCaixaContasHtml(sel){
   return '<div class="fcx-contas">'+finContasFechar().map(function(c){
     var emp=finCadById('empresas',c.empresaId), aplica=data>=finContaDataIni(c), r=finCaixaDoDia(c.id,data), on=!!sel&&sel.id===c.id;
     var cobra=finFechExigido(c,data), px=(!r&&!cobra)?finProximoFech(c,data):'';
-    var estado=!aplica?'':(!r?(cobra?'pend':'info'):(r.ressalva?'ress':'ok')), rot=!aplica?'Começa em '+fmtDate(finContaDataIni(c)):(!r?(cobra?'Em aberto':(finFechRegra(c)==='nenhum'?'Sem fechamento':'Fecha em '+fmtDate(px).slice(0,5))):(r.ressalva?'Fechado com ressalva':'Fechado'));
+    var refazer=!!r&&finCaixaMudou(r);
+    var estado=!aplica?'':(!r?(cobra?'pend':'info'):((r.ressalva||refazer)?'ress':'ok')), rot=!aplica?'Começa em '+fmtDate(finContaDataIni(c)):(!r?(cobra?'Em aberto':(finFechRegra(c)==='nenhum'?'Sem fechamento':'Fecha em '+fmtDate(px).slice(0,5))):(refazer?'A refazer':(r.ressalva?'Fechado com ressalva':'Fechado')));
     return '<div class="fcx-conta'+(on?' on':'')+'" role="button" tabindex="0" aria-pressed="'+(on?'true':'false')+'" onclick="finCaixaConta(\''+c.id+'\')" '+
       'onkeydown="if(event.key===\'Enter\'||event.key===\' \'){event.preventDefault();finCaixaConta(\''+c.id+'\');}">'+
       '<div class="n">'+esc(c.nome)+'</div><div class="e">'+esc(emp?emp.nome:'')+'</div>'+
@@ -1847,15 +1889,15 @@ function finCaixaFechadoHtml(c,k,nav){
   var mudou=k.aplica && Math.abs((k.sistema||0)-(Number(reg.saldoSistema)||0))>=0.005;
   var dif=Number(reg.diferenca)||0;
   return '<div class="card fcx-pn"><h3 class="fcx-h">Conferir e fechar — '+esc(c.nome)+'</h3>'+nav+
-    '<div class="fcx-feito '+(reg.ressalva?'ress':'ok')+'" role="status"><span class="ic" aria-hidden="true">'+(reg.ressalva?'!':'✓')+'</span><div><strong>'+(reg.ressalva?'Caixa fechado com ressalva':'Caixa fechado')+'</strong> em '+quando+'</div></div>'+
+    '<div class="fcx-feito '+((reg.ressalva||mudou)?'ress':'ok')+'" role="status"><span class="ic" aria-hidden="true">'+((reg.ressalva||mudou)?'!':'✓')+'</span><div><strong>'+(mudou?'Fechamento a refazer':(reg.ressalva?'Caixa fechado com ressalva':'Caixa fechado'))+'</strong> '+(mudou?'(fechado':'em')+' '+quando+(mudou?')':'')+'</div></div>'+
     '<div class="fcx-trio">'+
       '<div><div class="fcx-lb">Saldo no sistema</div><div class="fcx-grande">'+fmt(Number(reg.saldoSistema)||0)+'</div></div>'+
       '<div><div class="fcx-lb">Saldo no banco</div><div class="fcx-grande">'+fmt(Number(reg.saldoBanco)||0)+'</div></div>'+
       '<div><div class="fcx-lb">Diferença</div><div class="fcx-grande" style="color:'+(Math.abs(dif)>=0.005?'var(--red)':'var(--green)')+'">'+(Math.abs(dif)>=0.005?finFmtSinal(dif):fmt(0))+'</div></div>'+
     '</div>'+
     (reg.obs?'<div class="fcx-reg">Observação: '+esc(reg.obs)+'</div>':'')+
-    (mudou?'<div class="fcx-mudou" role="alert">Depois do fechamento, o saldo do sistema deste dia mudou para <strong>'+fmt(k.sistema)+'</strong>. Se for o caso, corrija o fechamento.</div>':'')+
-    '<div class="fcx-feito-acao"><a href="#" class="fcx-link" onclick="finCaixaCorrigir(\''+c.id+'\',true);return false">Corrigir este fechamento</a></div></div>';
+    (mudou?'<div class="fcx-mudou" role="alert">Depois do fechamento, entrou, mudou ou saiu um lançamento com data igual ou anterior, e o saldo do sistema deste dia passou para <strong>'+fmt(k.sistema)+'</strong>. Confira com o banco e feche o dia de novo.</div>':'')+
+    '<div class="fcx-feito-acao"><a href="#" class="fcx-link" onclick="finCaixaCorrigir(\''+c.id+'\',true);return false">'+(mudou?'Refazer este fechamento':'Corrigir este fechamento')+'</a></div></div>';
 }
 function finCaixaCorrigir(cid,liga){
   var key=finCaixaChave(cid,finCaixaDataDia());
@@ -1905,18 +1947,19 @@ function finCaixaHistoricoHtml(c,k){
     if(!r && (!primeira||x<primeira)) continue;
     if(regra==='diario'?((w!==0&&w!==6)||movim[x]||r):(r||finFechExigido(c,x))) dias.push({d:x,r:r});
   }
+  var refaz=dias.filter(function(o){ return o.r&&finCaixaMudou(o.r); }).length;
   var fech=dias.filter(function(o){ return o.r; }).length, ress=dias.filter(function(o){ return o.r&&o.r.ressalva; }).length, fer=dias.filter(function(o){ return !o.r&&finEhFeriado(o.d); }).length, aberto=dias.length-fech-fer, fimMes=finCaixaFimDoMes(mes);
-  var resumo=fech+(fech===1?' fechado':' fechados')+(ress?' · '+ress+' com ressalva':'')+' · '+aberto+' em aberto'+(fer?' · '+fer+(fer===1?' feriado':' feriados'):'');
+  var resumo=fech+(fech===1?' fechado':' fechados')+(ress?' · '+ress+' com ressalva':'')+(refaz?' · '+refaz+' a refazer':'')+' · '+aberto+' em aberto'+(fer?' · '+fer+(fer===1?' feriado':' feriados'):'');
   function linhaHtml(o){
     var r=o.r, d=o.d, quando=r&&r.em?new Date(r.em).toLocaleString('pt-BR',{dateStyle:'short',timeStyle:'short'}):'';
-    var fer=!r&&finEhFeriado(d);
-    var sit=fer?'<span class="fcx-st fer">Feriado</span>':(!r?'<span class="fcx-st ab">Em aberto</span>':(r.ressalva?'<span class="fcx-st ress">Fechado com ressalva</span>':'<span class="fcx-st ok">Fechado</span>'));
+    var fer=!r&&finEhFeriado(d), refazer=!!r&&finCaixaMudou(r);
+    var sit=fer?'<span class="fcx-st fer">Feriado</span>':(!r?'<span class="fcx-st ab">Em aberto</span>':refazer?'<span class="fcx-st ress" title="O saldo do sistema deste dia mudou depois do fechamento">A refazer</span>':(r.ressalva?'<span class="fcx-st ress">Fechado com ressalva</span>':'<span class="fcx-st ok">Fechado</span>'));
     var acao=fer?'<button class="fin-ic" title="Desmarcar feriado (vale para todas as contas)" aria-label="Desmarcar feriado de '+fmtDate(d)+'" onclick="finMarcarFeriado(\''+d+'\',false)">'+FIN_IC.ferX+'</button>'
       :!r?'<span class="fcx-acs"><button class="btn fcx-fechar" onclick="finCaixaAbrirDia(\''+d+'\',true)">Fechar</button><button class="fin-ic" title="Marcar como feriado (vale para todas as contas)" aria-label="Marcar '+fmtDate(d)+' como feriado" onclick="finMarcarFeriado(\''+d+'\',true)">'+FIN_IC.fer+'</button></span>'
       :(adm?'<button class="fin-ic dg" title="Excluir fechamento" aria-label="Excluir fechamento de '+fmtDate(d)+'" onclick="finCaixaExcluir(\''+esc(r.id)+'\')">'+FIN_IC.exc+'</button>':'');
     return '<tr'+(d===k.data?' class="fcx-sel"':'')+'><td><a href="#" onclick="finCaixaAbrirDia(\''+d+'\');return false" class="fcx-link" title="'+(r?esc('Fechado por '+(r.por||'—')+(quando?' em '+quando:'')):'Em aberto')+'"><strong>'+fmtDate(d)+'</strong></a>'+
       '<span class="fcx-sub"> '+finDiaSemana(d).toLowerCase()+((regra==='diario'&&d===fimMes)?' · <b>fim do mês</b>':'')+'</span></td>'+
-      '<td class="r">'+fmt(r?r.saldoSistema:finSaldoConta(c,d))+'</td>'+
+      '<td class="r">'+fmt(r?r.saldoSistema:finSaldoConta(c,d))+(refazer?'<div class="fcx-sub">agora '+fmt(finSaldoConta(c,d))+'</div>':'')+'</td>'+
       '<td class="r">'+(r?fmt(r.saldoBanco):'<span class="fcx-mut">—</span>')+'</td>'+
       '<td class="r" style="'+(r&&r.ressalva?'color:var(--red);font-weight:600':'')+'">'+(r&&r.ressalva?finFmtSinal(r.diferenca):'<span class="fcx-mut">—</span>')+'</td>'+
       '<td>'+sit+'</td><td><span class="fin-ell" title="'+esc((r&&r.obs)||'')+'">'+((r&&r.obs)?esc(r.obs):'<span class="fcx-mut">—</span>')+'</span></td><td class="r">'+acao+'</td></tr>';
@@ -1935,9 +1978,11 @@ function finCaixaHistoricoHtml(c,k){
       }
     }
     abertos.sort(function(a,b){ return a.d<b.d?1:-1; });
-    var lst=abertos.concat(ultimo?[{d:ultimo.data,r:ultimo}]:[]);
+    var refazC=finCaixasARefazer(c.id).filter(function(r){ return !ultimo||r.id!==ultimo.id; }).sort(function(a,b){ return a.data<b.data?1:-1; }).map(function(r){ return {d:r.data,r:r}; });
+    var lst=abertos.concat(refazC,ultimo?[{d:ultimo.data,r:ultimo}]:[]);
     var pendC=finPendFech(c), hojeAb=abertos.some(function(o){ return o.d===hoje; }) && regra==='diario';
-    var resumoC=(pendC.n?finPendTexto(pendC):'Nada pendente')+(hojeAb?' · hoje em aberto':'')+(ultimo?' · último fechamento em '+fmtDate(ultimo.data):' · nenhum fechamento ainda');
+    var nRefC=refazC.length+((ultimo&&finCaixaMudou(ultimo))?1:0);
+    var resumoC=(pendC.n?finPendTexto(pendC):'Nada pendente')+(nRefC?' · '+nRefC+(nRefC===1?' fechamento a refazer':' fechamentos a refazer'):'')+(hojeAb?' · hoje em aberto':'')+(ultimo?' · último fechamento em '+fmtDate(ultimo.data):' · nenhum fechamento ainda');
     var tabC=lst.length?'<table class="tbl fcx-th"><colgroup><col style="width:210px"><col style="width:150px"><col style="width:150px"><col style="width:130px"><col style="width:170px"><col><col style="width:124px"></colgroup>'+
       '<thead><tr><th>Data</th><th class="r">Saldo do sistema</th><th class="r">Saldo do banco</th><th class="r">Diferença</th><th>Situação</th><th>Observação</th><th></th></tr></thead><tbody>'+lst.map(linhaHtml).join('')+'</tbody></table>'
       :'<div class="empty">Nenhum dia a fechar.</div>';
@@ -2387,6 +2432,14 @@ function finImprimir(){ finFechaMenuExp(); window.print(); }
 /* ── importar em lote ── */
 var _finImp=null;   /* análise da planilha que está na janela de conferência */
 var _finImpDup=false;   /* importar também as linhas que parecem repetidas (só se a pessoa marcar) */
+/* Linhas que vão entrar e mudam o saldo de dias com caixa fechado */
+function finImpFechAviso(an){
+  var vao=an.itens.filter(function(i){ return i.status==='ok' || (_finImpDup && i.status==='dup'); });
+  if(!vao.length) return '';
+  var sim=(S.financeiro||[]).concat(vao.map(function(i,k){ return Object.assign({},i.l,{id:'__imp'+k}); }));
+  var av=finFechAvisoHtml(finFechAfetados(sim));
+  return av?'<p style="margin:0 0 8px">'+av+'</p>':'';
+}
 function finImpDupMuda(v){ _finImpDup=!!v; var root=document.getElementById('modal-root'); if(root&&_finImp) root.innerHTML=finImportaHtml(); var c=document.getElementById('fin-imp-dup'); if(c&&c.focus) c.focus(); }
 function finImportaData(v){
   var iso='', m;
@@ -2484,7 +2537,7 @@ function finImportaHtml(){
   var corpo=an.erroGeral?'<p style="color:var(--red);margin:6px 0 0">'+esc(an.erroGeral)+'</p>'
     :'<p class="fin-imp-res"><strong>'+r.total+'</strong> linhas lidas · <strong>'+r.ok+'</strong> prontas'+(r.erro?' · <strong style="color:var(--red)">'+r.erro+' com erro</strong>':'')+(r.dup?' · <strong>'+r.dup+' parecem repetidas</strong>':'')+'</p>'+
       (r.erro?'<p class="fcx-sub" style="margin:0 0 8px">As linhas com erro não serão importadas. Corrija na planilha e importe de novo, se quiser.</p>':'')+
-      (r.dup?finImpDupHtml(an):'')+tabela;
+      (r.dup?finImpDupHtml(an):'')+finImpFechAviso(an)+tabela;
   return '<div class="fin-ov" onclick="if(event.target===this)finDlgCancelar()"><div class="fin-dlg fin-imp-dlg" role="dialog" aria-modal="true" aria-labelledby="fin-imp-t">'+
     '<h3 id="fin-imp-t">Importar lançamentos</h3><div class="fcx-sub" style="margin-bottom:6px">'+esc(an.arquivo||'')+'</div>'+corpo+
     '<div class="acoes"><button class="btn" id="fin-dlg-cancelar" onclick="finDlgCancelar()" style="background:#eee;color:var(--mt)">Cancelar</button>'+
@@ -2775,6 +2828,8 @@ function finAtencaoHtml(){
     ids[c.id]=1;
     var p=finPendFech(c);
     if(p.n>0){ n++; itens.push('<button onclick="finIrFecharDiaConta(\''+c.id+'\',\''+p.desde+'\')" title="Abre o Fechar caixa no fechamento mais antigo pendente ('+fmtDate(p.desde)+')">'+esc(c.nome)+' · '+finPendTexto(p)+'</button>'); }
+    var rf=finCaixasARefazer(c.id).sort(function(a,b){ return a.data<b.data?-1:1; });
+    if(rf.length){ n++; itens.push('<button onclick="finIrFecharDiaConta(\''+c.id+'\',\''+rf[0].data+'\')" title="O saldo do sistema mudou depois do fechamento. Abre o Fechar caixa no mais antigo ('+fmtDate(rf[0].data)+')">'+esc(c.nome)+' · '+rf.length+(rf.length===1?' fechamento a refazer':' fechamentos a refazer')+'</button>'); }
     var pd=finParado(c);
     if(pd){ n++; itens.push('<button onclick="finSoConta(\''+c.id+'\')" title="Conta de passagem com saldo sem repasse desde '+fmtDate(pd.desde)+'">'+esc(c.nome)+' · <span class="fin-mv">'+fmt(pd.valor)+'</span> parado há '+pd.n+' dias</button>'); }
   });
@@ -3657,6 +3712,7 @@ function finLancIgual(l){
 var _finSalvando=false, _finDupOk=false, _finDataOk=false, _finDataConfirmada=null;
 /* Lançamento com data diferente de hoje (anterior ou futura) pede confirmação ao salvar. Ligado no sistema; os testes automáticos antigos o desligam. */
 var FIN_CONFIRMA_DATA=true;
+var _finFechOk=false;   /* já avisou que o lançamento muda dias fechados e a pessoa confirmou */
 function finDataForaDoComum(v){ if(!v) return ''; var h=todayStr(); if(v>h) return 'futuro'; if(v<h) return 'passado'; return ''; }
 /* "ontem", "há 5 dias", "amanhã", "daqui a 3 dias" */
 function finDataDistancia(v){
@@ -3710,6 +3766,18 @@ async function addFinFaz(manter){
       return;
     }
   }
+  /* mexe no saldo de um dia com caixa fechado (o saldo é acumulado: vale para dias fechados depois desta data): avisa antes */
+  if(!_finFechOk){
+    var sim=(S.financeiro||[]).filter(function(f){ return !orig || f.id!==orig.id; });
+    sim.push(Object.assign({},l,{id:orig?orig.id:'__novo'}));
+    if(par) sim.push(Object.assign({},l,{id:'__par',contaId:l.contraparteId,contraparteId:l.contaId,sentido:l.sentido==='saida'?'entrada':'saida'}));
+    var afet=finFechAfetados(sim);
+    if(afet.length){
+      finDialogo({titulo:'Este lançamento muda dias já fechados',texto:finIdentLanc(Object.assign({},orig||{},l))+finFechAvisoHtml(afet)+'<span style="display:block;margin-top:10px">Quer salvar assim?</span>',
+        rotuloOk:'Salvar assim',onOk:function(){ _finFechOk=true; _finSalvando=false; return addFin(manter).then(function(){ _finFechOk=false; }); }});
+      return;
+    }
+  }
   try{
     var novoId;
     if(par){
@@ -3756,7 +3824,8 @@ function finEstornar(id){
   var v=Number(f.valor)||0, hoje=todayStr(), efeito=finEntraSaldo(f)?-v:v;
   finDialogo({titulo:'Estornar lançamento',
     texto:'Vai ser criado um lançamento de <strong>hoje ('+fmtDate(hoje)+')</strong> na mesma conta e na mesma categoria (<strong>'+esc(finNatNome(f)||'')+'</strong>), '+
-      'com o valor invertido: <strong>'+(efeito<0?'− '+fmt(-efeito):fmt(efeito))+'</strong>.<br><span class="fcx-sub">O lançamento original continua no dia '+fmtDate(f.data)+', marcado como estornado.</span>',
+      'com o valor invertido: <strong>'+(efeito<0?'− '+fmt(-efeito):fmt(efeito))+'</strong>.<br><span class="fcx-sub">O lançamento original continua no dia '+fmtDate(f.data)+', marcado como estornado.</span>'+
+      finFechAvisoHtml(finFechAfetados((S.financeiro||[]).concat([{id:'__est',tipo:f.tipo,data:hoje,valor:-v,contaId:f.contaId,sentido:f.sentido||''}]))),
     rotuloOk:'Estornar',
     onOk:async function(){
       try{
@@ -3796,10 +3865,13 @@ function finExcluir(id){
   var escolha=emLote?'<span class="fin-dlg-op" role="radiogroup" aria-label="O que excluir">'+
       '<label><input type="radio" name="fin-exc-esc" value="um" checked onchange="finExcEscolha()"/> Só este lançamento</label>'+
       '<label><input type="radio" name="fin-exc-esc" value="lote" onchange="finExcEscolha()"/> Toda a '+esc(finLoteRotulo(f.lote))+' ('+info.n+' lançamentos)</label></span>':'';
-  var est=finEstornoDe(f.id), fech=finCaixaDoDia(f.contaId,f.data);
+  var est=finEstornoDe(f.id);
+  var semUm=(S.financeiro||[]).filter(function(x){ return x.id!==f.id && x.estornoDe!==f.id; });
+  var avUm=finFechAvisoHtml(finFechAfetados(semUm)), avLote='';
+  if(emLote){ var saiLote={}; info.itens.concat(finEstornosDoLote(f.lote)).forEach(function(x){ saiLote[x.id]=1; }); avLote=finFechAvisoHtml(finFechAfetados((S.financeiro||[]).filter(function(x){ return !saiLote[x.id]; }))); }
   /* um lançamento estornado e o seu estorno se anulam: excluir só um deixaria o saldo errado, então os dois saem juntos */
   var avisoEst=est?'<span class="fin-dlg-alerta">Este lançamento foi estornado em '+fmtDate(est.data)+'. O estorno também será excluído, porque os dois se anulam.</span>':'';
-  var avisoFech=fech?'<span class="fin-dlg-alerta">O caixa de '+fmtDate(f.data)+' já foi fechado nesta conta: excluir muda o saldo desse dia.</span>':'';
+  var avisoFech=(avUm?'<span id="fin-exc-av-um">'+avUm+'</span>':'')+(avLote?'<span id="fin-exc-av-lote" style="display:none">'+avLote+'</span>':'');
   finDialogo({
     titulo:est?'Excluir lançamento e estorno':'Excluir lançamento',
     texto:finIdentLanc(f)+escolha+avisoEst+avisoFech+'<span style="display:block;margin-top:10px">'+(emLote?'O que for excluído sai do extrato e dos saldos.':(est?'Os dois saem do extrato e dos saldos.':'Ele sai do extrato e dos saldos.'))+' O motivo fica registrado.</span>',
@@ -3815,6 +3887,8 @@ function finExcEscolha(){
   var lote=!!(r&&r.value==='lote'); _finExcLote=lote;
   if(b) b.textContent=lote?'Desfazer importação':'Excluir lançamento';
   if(t) t.textContent=lote?'Desfazer importação':'Excluir lançamento';
+  var a1=document.getElementById('fin-exc-av-um'), a2=document.getElementById('fin-exc-av-lote');
+  if(a1) a1.style.display=lote?'none':''; if(a2) a2.style.display=lote?'':'none';
 }
 /* ── Importação: cada planilha importada é um lote, que dá para ver e desfazer de uma vez ── */
 function finLoteRotulo(lote){
