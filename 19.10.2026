@@ -1193,7 +1193,8 @@ async function toggleCadastroFin(col,id,ativo){
 /* Erros por campo, indexados pelo id do elemento. */
 function finValidaCampos(l){
   var e={}, c=l.contaId?finCadById('contas',l.contaId):null, dc=null;
-  if(!l.data) e['fin-data']='Informe a data.';
+  if(l.data==='!'){ e['fin-data']='Data não reconhecida. Digite como 28/10/2026.'; l=Object.assign({},l,{data:''}); }
+  else if(!l.data) e['fin-data']='Informe a data.';
   if(isNaN(l.valor)) e['fin-valor']='Valor não reconhecido. Digite como 1.234,56.';
   else if(!(Number(l.valor)>0)) e['fin-valor']='Informe um valor maior que zero.';
   if(!l.contaId) e['fin-conta']='Selecione a conta.';
@@ -1341,13 +1342,22 @@ function finTemPar(f){
   var cents=Math.round((Number(f.valor)||0)*100), oposto=f.sentido==='entrada'?'saida':'entrada';
   /* a ponta ligada só conta se ainda bater: valor, sentido oposto e a conta certa (alterar uma ponta não altera a outra) */
   var p=f.parId?lista.find(function(x){ return x.id===f.parId; }):null;
-  if(p && p.sentido===oposto && p.contaId===f.contraparteId && Math.round((Number(p.valor)||0)*100)===cents) return true;
+  if(p && p.sentido===oposto && p.contaId===f.contraparteId && Math.round((Number(p.valor)||0)*100)===cents && Math.abs(finDifDias(p.data,f.data))<=5) return true;
   return lista.some(function(x){
     return x.id!==f.id && x.tipo==='transferencia' && x.sentido===oposto && x.contaId===f.contraparteId &&
       Math.round((Number(x.valor)||0)*100)===cents && Math.abs(finDifDias(x.data,f.data))<=5;
   });
 }
 /* A ponta ligada existe, mas não bate mais (valor ou conta alterados depois). */
+/* A outra ponta gravada junto com esta transferência (ligadas pelo parId), se ainda existir. */
+function finParDe(f){
+  if(!f||!finEhTransferencia(f)||!f.parId) return null;
+  return (S.financeiro||[]).find(function(x){ return x.id===f.parId && finEhTransferencia(x); })||null;
+}
+/* A outra ponta depois de alterar esta: mesma data, valor, descrição e observação; contas trocadas e sentido oposto. */
+function finEspelho(l,p){
+  return Object.assign({},p,{data:l.data,valor:l.valor,descricao:l.descricao,obs:l.obs,contaId:l.contraparteId,contraparteId:l.contaId,sentido:l.sentido==='saida'?'entrada':'saida',parId:l.id});
+}
 function finParDiverge(f){
   var p=f.parId?(S.financeiro||[]).find(function(x){ return x.id===f.parId; }):null;
   return !!(p && !finTemPar(f));
@@ -2859,22 +2869,23 @@ function pageFinanceiro(){
 /* Só as contas que o sistema controla. Com uma empresa selecionada, a conta do lançamento lista só as dela; "Outra conta" mostra todas. Sem conta escolhida, nada vem pré-selecionado. */
 function finOptsConta(sel,exclui,modo){
   return '<option value=""'+(sel?'':' selected')+'>Selecione…</option>'+
-    finCadAtivos('contas').filter(function(c){
+    finCad('contas').filter(function(c){
       if(c.id===exclui) return false;
-      if(c.id===sel) return true;
+      if(c.id===sel) return true;   /* a escolhida aparece mesmo inativa: editar um lançamento antigo não pode apagá-la */
+      if(c.ativo===false) return false;
       if(finExterna(c)) return false;
       if(modo==='origem' && _finEmp && c.empresaId!==_finEmp) return false;
       return true;
     }).map(function(c){
       var emp=finCadById('empresas',c.empresaId);
-      return '<option value="'+c.id+'"'+(c.id===sel?' selected':'')+'>'+esc(c.nome)+' — '+esc(emp?emp.nome:'sem empresa')+'</option>';
+      return '<option value="'+c.id+'"'+(c.id===sel?' selected':'')+'>'+esc(c.nome)+' — '+esc(emp?emp.nome:'sem empresa')+(c.ativo===false?' (inativa)':'')+'</option>';
     }).join('');
 }
 function finOptsCategoria(sinal,sel){
   /* sem opção pré-selecionada: a categoria precisa ser escolhida, não herdada da ordem da lista */
   return '<option value=""'+(sel?'':' selected')+'>Selecione…</option>'+
-    finCadAtivos('categorias').filter(function(n){return !sinal||!n.sinal||n.sinal===sinal;}).map(function(n){
-      return '<option value="'+n.id+'"'+(n.id===sel?' selected':'')+'>'+esc(n.nome)+'</option>';
+    finCad('categorias').filter(function(n){ return n.id===sel || (n.ativo!==false && (!sinal||!n.sinal||n.sinal===sinal)); }).map(function(n){
+      return '<option value="'+n.id+'"'+(n.id===sel?' selected':'')+'>'+esc(n.nome)+(n.ativo===false?' (inativa)':'')+'</option>';
     }).join('');
 }
 /* Seletor de empresa no cabeçalho: vale para Lançamentos e Fechar caixa; some nas telas de configuração. */
@@ -3042,7 +3053,7 @@ function finFormCtx(){
 /* O texto da opção que cria a outra ponta junto com esta. */
 function finParTexto(sentido,contraId){
   var n=contraId?finCadNome('contas',contraId):'';
-  return 'Registrar também a transferência '+(sentido==='entrada'?'enviada':'recebida')+' na '+esc(n)+' <span class="sub">(cria os dois lançamentos; depois cada um fica independente)</span>';
+  return 'Registrar também a transferência '+(sentido==='entrada'?'enviada':'recebida')+' na '+esc(n)+' <span class="sub">(cria os dois lançamentos, ligados: alterar ou excluir um altera o outro)</span>';
 }
 /* Enviada ou Recebida: troca o botão, o rótulo da outra conta e o texto da opção de registrar a outra ponta. */
 function finSentido(s){
@@ -3119,6 +3130,7 @@ function _finFormHtmlBase(){
       '<div class="fin-c5"><div class="fg"><label for="dpt-fin-data">Data *</label>'+finDp('fin-data',dataSel,{oninput:'finDataAviso()',onchange:'finDataAviso()',atalhos:'dentro',rotulo:'Data'})+'<div class="fin-aviso" id="avi-fin-data" role="status"></div><div class="fin-err" id="err-fin-data" role="alert"></div></div></div>'+
       '<div class="fin-c4">'+fc('Observação','<input type="text" id="fin-obs" maxlength="300" value="'+esc(bs?(bs.obs||''):'')+'" placeholder="Opcional"/>','fin-obs')+'</div>'+
     '</div>'+
+    ((tr&&ed&&finParDe(ed))?'<div class="fin-par" style="cursor:default">A outra ponta desta transferência, na '+esc(finCadNome('contas',finParDe(ed).contaId))+', é alterada junto.</div>':'')+
     ((tr&&!ed)?'<label class="fin-par" id="fin-par-box"'+(contraSel?'':' style="display:none"')+'><input type="checkbox" id="fin-par" checked/><span id="fin-par-txt">'+finParTexto(sentido,contraSel)+'</span></label>':'')+
     '<div class="fin-linb">'+
       '<button class="btn bp" id="fin-salvar" type="button" onclick="addFin(false)">'+(ed?'Salvar alteração':'Salvar')+'</button>'+
@@ -3688,9 +3700,12 @@ function finViewLancamentos(){
 
 function finLerForm(){
   function v(id){ var e=document.getElementById(id); return e?e.value:''; }
-  var tipo=v('fin-tipo');
+  var tipo=v('fin-tipo'), data=v('fin-data');
+  /* vale o que está escrito no campo: se a pessoa digitou uma data inválida, o valor anterior não pode ser salvo no lugar */
+  var dt=document.getElementById('dpt-fin-data');
+  if(dt){ var lida=finDpLe(dt.value,data||todayStr()); data=lida===null?'!':lida; }
   return {
-    tipo:tipo, sentido: tipo==='transferencia'?v('fin-sentido'):'', data:v('fin-data'), valor:finParseVal(v('fin-valor')),
+    tipo:tipo, sentido: tipo==='transferencia'?v('fin-sentido'):'', data:data, valor:finParseVal(v('fin-valor')),
     contaId:v('fin-conta'),
     contraparteId: tipo==='transferencia'?v('fin-outra'):'',
     categoriaId: tipo==='transferencia'?'':v('fin-nat'),
@@ -3742,8 +3757,11 @@ async function addFinFaz(manter){
   }
   /* erros aparecem ao lado de cada campo; a tela não é redesenhada, então nada do que foi digitado se perde */
   var erros=finValidaCampos(l);
+  var parOrig=(orig&&finEhTransferencia(orig))?finParDe(orig):null, ocNova=l.contraparteId?finCadById('contas',l.contraparteId):null;
+  var outraJunto=!!(parOrig && ocNova && !finExterna(ocNova) && l.contraparteId!==l.contaId);   /* a outra ponta é alterada junto */
+  if(outraJunto && l.data && l.data!=='!' && l.data<finContaDataIni(ocNova)) erros['fin-outra']='A conta "'+ocNova.nome+'" começa em '+fmtDate(finContaDataIni(ocNova))+'. Escolha uma data a partir daí.';
   if(orig && orig.estornoDe && !erros['fin-valor']) l.valor=-Math.abs(Number(l.valor)||0);   /* estorno continua com o valor invertido */
-  if(par){ var oc=finCadById('contas',l.contraparteId); if(oc && l.data && l.data<finContaDataIni(oc)) erros['fin-outra']='A conta "'+oc.nome+'" começa em '+fmtDate(finContaDataIni(oc))+'. Escolha uma data a partir daí.'; }
+  if(par){ var oc=finCadById('contas',l.contraparteId); if(oc && l.data && l.data!=='!' && l.data<finContaDataIni(oc)) erros['fin-outra']='A conta "'+oc.nome+'" começa em '+fmtDate(finContaDataIni(oc))+'. Escolha uma data a partir daí.'; }
   if(Object.keys(erros).length){ finErros(erros); finErroEm('fin-salvar','Revise os campos marcados.'); return; }
   finErroEm('fin-salvar','');
   /* data fora do comum (no futuro ou com mais de um ano): pergunta antes de salvar, para um erro no ano não passar despercebido */
@@ -3768,8 +3786,9 @@ async function addFinFaz(manter){
   }
   /* mexe no saldo de um dia com caixa fechado (o saldo é acumulado: vale para dias fechados depois desta data): avisa antes */
   if(!_finFechOk){
-    var sim=(S.financeiro||[]).filter(function(f){ return !orig || f.id!==orig.id; });
+    var sim=(S.financeiro||[]).filter(function(f){ return (!orig || f.id!==orig.id) && !(outraJunto && f.id===parOrig.id); });
     sim.push(Object.assign({},l,{id:orig?orig.id:'__novo'}));
+    if(outraJunto) sim.push(finEspelho(Object.assign({},l,{id:orig.id}),parOrig));
     if(par) sim.push(Object.assign({},l,{id:'__par',contaId:l.contraparteId,contraparteId:l.contaId,sentido:l.sentido==='saida'?'entrada':'saida'}));
     var afet=finFechAfetados(sim);
     if(afet.length){
@@ -3786,12 +3805,19 @@ async function addFinFaz(manter){
       var l2=Object.assign({},l,{id:id2,parId:novoId,contaId:l.contraparteId,contraparteId:l.contaId,sentido:l.sentido==='saida'?'entrada':'saida'});
       l.id=novoId; l.parId=id2;
       await upsertLancamento(l); await upsertLancamento(l2);
+    }else if(outraJunto){
+      l.parId=parOrig.id; novoId=await upsertLancamento(l);
+      await upsertLancamento(finEspelho(l,parOrig));
+    }else if(parOrig){
+      /* a outra conta foi retirada (ou virou externa): as pontas deixam de ser ligadas, e a outra fica como estava */
+      l.parId=''; novoId=await upsertLancamento(l);
+      await upsertLancamento(Object.assign({},parOrig,{parId:''}));
     }else novoId=await upsertLancamento(l);
     S.financeiro=await fetchCollection('lancamentos');
     var editou=!!_finEdit;
     _finRecente=novoId;
     var fechouAntes=[l.contaId,par?l.contraparteId:''].filter(Boolean).some(function(cid){ return finCaixaDoDia(cid,l.data); }) || (orig && orig.data!==l.data && finCaixaDoDia(orig.contaId,orig.data));
-    showToast((editou?'Lançamento alterado.':(par?'Transferência registrada: enviada e recebida.':'Lançamento registrado.'))+(fechouAntes?' Atenção: o caixa desse dia já estava fechado e o saldo dele mudou.':''));
+    showToast((editou?'Lançamento alterado.'+(outraJunto?' A outra ponta, na '+ocNova.nome+', também foi alterada.':(parOrig?' A outra ponta ficou como estava e não está mais ligada a esta.':'')):(par?'Transferência registrada: enviada e recebida.':'Lançamento registrado.'))+(fechouAntes?' Atenção: o caixa desse dia já estava fechado e o saldo dele mudou.':''));
     _finUltimo={data:l.data,contaId:l.contaId,contraparteId:l.contraparteId||'',sentido:l.sentido||''};
     /* mostra o que acabou de ser lançado: leva a tela para o mês e a conta do lançamento */
     if(!finPerCobre(l.data)) finPerVaiPara(l.data);
@@ -3865,18 +3891,19 @@ function finExcluir(id){
   var escolha=emLote?'<span class="fin-dlg-op" role="radiogroup" aria-label="O que excluir">'+
       '<label><input type="radio" name="fin-exc-esc" value="um" checked onchange="finExcEscolha()"/> Só este lançamento</label>'+
       '<label><input type="radio" name="fin-exc-esc" value="lote" onchange="finExcEscolha()"/> Toda a '+esc(finLoteRotulo(f.lote))+' ('+info.n+' lançamentos)</label></span>':'';
-  var est=finEstornoDe(f.id);
-  var semUm=(S.financeiro||[]).filter(function(x){ return x.id!==f.id && x.estornoDe!==f.id; });
+  var est=finEstornoDe(f.id), outra=finParDe(f);
+  var semUm=(S.financeiro||[]).filter(function(x){ return x.id!==f.id && x.estornoDe!==f.id && !(outra && x.id===outra.id); });
   var avUm=finFechAvisoHtml(finFechAfetados(semUm)), avLote='';
   if(emLote){ var saiLote={}; info.itens.concat(finEstornosDoLote(f.lote)).forEach(function(x){ saiLote[x.id]=1; }); avLote=finFechAvisoHtml(finFechAfetados((S.financeiro||[]).filter(function(x){ return !saiLote[x.id]; }))); }
   /* um lançamento estornado e o seu estorno se anulam: excluir só um deixaria o saldo errado, então os dois saem juntos */
   var avisoEst=est?'<span class="fin-dlg-alerta">Este lançamento foi estornado em '+fmtDate(est.data)+'. O estorno também será excluído, porque os dois se anulam.</span>':'';
+  var avisoPar=outra?'<span class="fin-dlg-alerta">A outra ponta desta transferência, na '+esc(finCadNome('contas',outra.contaId))+', também será excluída: as duas formam a mesma transferência.</span>':'';
   var avisoFech=(avUm?'<span id="fin-exc-av-um">'+avUm+'</span>':'')+(avLote?'<span id="fin-exc-av-lote" style="display:none">'+avLote+'</span>':'');
   finDialogo({
-    titulo:est?'Excluir lançamento e estorno':'Excluir lançamento',
-    texto:finIdentLanc(f)+escolha+avisoEst+avisoFech+'<span style="display:block;margin-top:10px">'+(emLote?'O que for excluído sai do extrato e dos saldos.':(est?'Os dois saem do extrato e dos saldos.':'Ele sai do extrato e dos saldos.'))+' O motivo fica registrado.</span>',
+    titulo:est?'Excluir lançamento e estorno':(outra?'Excluir transferência':'Excluir lançamento'),
+    texto:finIdentLanc(f)+escolha+avisoEst+avisoPar+avisoFech+'<span style="display:block;margin-top:10px">'+(emLote?'O que for excluído sai do extrato e dos saldos.':(est?'Os dois saem do extrato e dos saldos.':'Ele sai do extrato e dos saldos.'))+' O motivo fica registrado.</span>',
     motivo:{rotulo:'Motivo da exclusão',obrigatorio:true},
-    rotuloOk:est?'Excluir os dois':'Excluir lançamento', perigo:true,
+    rotuloOk:(est||outra)?'Excluir os dois':'Excluir lançamento', perigo:true,
     onOk:function(motivo){ return (emLote&&_finExcLote)?finDesfazerLote(f.lote,motivo):finExcluirGravar(id,motivo); }
   });
 }
@@ -3944,13 +3971,14 @@ async function finExcluirGravar(id,motivo){
     lote["delete"](fb.doc(fb.db,'lancamentos',id));
     /* o estorno deste lançamento sai junto, no mesmo lote (ou os dois, ou nenhum) */
     var ests=(S.financeiro||[]).filter(function(x){ return x.estornoDe===id; });
+    var outra=finParDe(f); if(outra) ests.push(outra);   /* a outra ponta da transferência sai junto, no mesmo lote */
     ests.forEach(function(e){
       lote.set(fb.doc(fb.db,'lancExcluidos',e.id),Object.assign({},e,{excluidoMotivo:motivo,excluidoPor:currentUser.id,excluidoEm:em,excluidoJuntoCom:id}));
       lote["delete"](fb.doc(fb.db,'lancamentos',e.id));
     });
     await lote.commit();
     S.financeiro=await fetchCollection('lancamentos');
-    showToast(ests.length?'Lançamento e estorno excluídos.':'Lançamento excluído.');
+    showToast(outra?'Transferência excluída nas duas contas.':(ests.length?'Lançamento e estorno excluídos.':'Lançamento excluído.'));
     navigate('financeiro');
   }catch(e){ showToast('Erro: '+(e.message||e.code)); }
 }
