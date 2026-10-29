@@ -1651,12 +1651,13 @@ function finCalcPeriodo(c,de,ate){
 /* Linhas de extrato (com saldo depois de cada uma) das contas dadas, de uma data a outra. */
 function finLinhasDe(contas,de,ate){
   var ids={}, linhas=[], s=0;
-  contas.forEach(function(c){ ids[c.id]=true; var k=finCalcPeriodo(c,de,ate); if(k.aplica) s+=k.abertura; });
+  contas.forEach(function(c){ ids[c.id]=finContaDataIni(c)||''; var k=finCalcPeriodo(c,de,ate); if(k.aplica) s+=k.abertura; });
   (S.financeiro||[]).forEach(function(f){
     var d=f.data||'';
     if(de&&d<de) return; if(ate&&d>ate) return;
     var v=Number(f.valor)||0;
-    if(!ids[f.contaId]) return;
+    if(!Object.prototype.hasOwnProperty.call(ids,f.contaId)) return;
+    if(d<ids[f.contaId]) return;   /* antes da data inicial da conta: já está no saldo de abertura (mesma regra do saldo) */
     var L={f:f,ent:0,sai:0};
     if(finEntraSaldo(f)) L.ent=v; else L.sai=v;
     linhas.push(L);
@@ -1976,14 +1977,14 @@ function finCaixaHistoricoHtml(c,k){
   }
   /* Como regra, só os dias em aberto (de qualquer mês) e o último fechado; o histórico completo do mês abre num link. */
   if(!_fcxHistCompleto){
-    /* mesma regra dos avisos (finPendFech): de hoje para trás, até o último fechamento feito */
+    /* mesma regra dos avisos (finPendFech): de hoje para trás, todos os dias exigidos e não fechados */
     var abertos=[], ultimo=null, iniA=finIniAvisos(c), guardaA=0;
     (S.finCaixa||[]).forEach(function(r){ if(r.contaId===c.id && (!ultimo||r.data>ultimo.data)) ultimo=r; });
     if(regra!=='nenhum' && iniA){
-      for(var y=hoje; y>=iniA && guardaA<400; y=finDiaMais(y,-1)){
+      var feitosA={}; (S.finCaixa||[]).forEach(function(x){ if(x.contaId===c.id) feitosA[x.data]=1; });
+      for(var y=hoje; y>=iniA && guardaA<1200; y=finDiaMais(y,-1)){
         guardaA++;
-        if(!finFechExigido(c,y)) continue;
-        if(finCaixaDoDia(c.id,y)) break;
+        if(!finFechExigido(c,y) || feitosA[y]) continue;
         abertos.push({d:y,r:null});
       }
     }
@@ -2280,7 +2281,7 @@ function finDesXml(s){
 function finColXlsx(i){ var s=''; i++; while(i>0){ var m=(i-1)%26; s=String.fromCharCode(65+m)+s; i=Math.floor((i-1)/26); } return s; }
 function finColIdx(letras){ var n=0; for(var i=0;i<letras.length;i++) n=n*26+(letras.charCodeAt(i)-64); return n-1; }
 function finSerial(iso){ var p=String(iso).split('-'); return Math.round((Date.UTC(+p[0],+p[1]-1,+p[2])-Date.UTC(1899,11,30))/86400000); }
-function finSerialIso(n){ var d=new Date(Date.UTC(1899,11,30)+Math.round(n)*86400000); return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2)+'-'+('0'+d.getUTCDate()).slice(-2); }
+function finSerialIso(n){ var d=new Date(Date.UTC(1899,11,30)+Math.floor(n)*86400000);   /* floor: a fração é a hora do dia */ return d.getUTCFullYear()+'-'+('0'+(d.getUTCMonth()+1)).slice(-2)+'-'+('0'+d.getUTCDate()).slice(-2); }
 function finNorm(s){ return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim(); }
 
 /* estilos: 1 cabeçalho verde, 2 data, 3 valor, 4 texto com quebra, 5 negrito */
@@ -2799,9 +2800,11 @@ function finPendFech(c){
   var hoje=todayStr(), ini=finIniAvisos(c), r=finFechRegra(c), un={diario:'dia',semanal:'semana',mensal:'mes',nenhum:'dia'}[r];
   var d=r==='diario'?finDiaMais(hoje,-1):hoje, n=0, desde='', guarda=0;
   if(!c || !ini || r==='nenhum') return {n:0,desde:'',un:un};
-  while(d>=ini && guarda<400){
+  var feitos={}; (S.finCaixa||[]).forEach(function(x){ if(x.contaId===c.id) feitos[x.data]=1; });
+  /* todos os dias exigidos e não fechados, desde o início (um fechamento depois não apaga os dias que ficaram para trás) */
+  while(d>=ini && guarda<1200){
     guarda++;
-    if(finFechExigido(c,d)){ if(finCaixaDoDia(c.id,d)) break; n++; desde=d; }
+    if(finFechExigido(c,d) && !feitos[d]){ n++; desde=d; }
     d=finDiaMais(d,-1);
   }
   return {n:n,desde:desde,un:un};
@@ -4183,7 +4186,7 @@ function finCadForm(col){
       '<div class="fg"><label>Tipo *</label><select id="cad-sinal">'+
         '<option value="saida"'+(ed&&ed.sinal==='saida'?' selected':'')+'>Saída</option>'+
         '<option value="entrada"'+(ed&&ed.sinal==='entrada'?' selected':'')+'>Entrada</option>'+
-      '</select></div>'+
+      '</select><div class="fin-err" id="err-cad-sinal" role="alert"></div></div>'+
       inp('cad-obs','Observação',ed?ed.obs:'')+'</div>';
   }
   return '<div class="st" style="margin-top:0">'+(ed?'Alterar ':{empresas:'Nova ',contas:'Nova ',categorias:'Nova '}[col])+{empresas:'empresa',contas:'conta bancária',categorias:'categoria'}[col]+'</div>'+
@@ -4321,9 +4324,19 @@ async function salvarCadastro(col){
       o.saldoInicial=finParseVal(v('cad-saldo'));
       if(isNaN(o.saldoInicial)) erros['cad-saldo']='Valor não reconhecido. Digite como 1.234,56.';
       o.dataInicial=v('cad-datainicial');
+      /* lançamentos antes da data inicial ficariam fora do saldo, mas ainda na lista: a data não pode passar do primeiro lançamento */
+      if(ed && o.dataInicial){
+        var antes=(S.financeiro||[]).filter(function(f){ return f.contaId===ed.id && f.data && f.data<o.dataInicial; }).map(function(f){ return f.data; }).sort();
+        if(antes.length) erros['cad-datainicial']='A conta tem '+antes.length+(antes.length===1?' lançamento':' lançamentos')+' antes de '+fmtDate(o.dataInicial)+' (o primeiro em '+fmtDate(antes[0])+'). Use uma data até '+fmtDate(antes[0])+', ou mude esses lançamentos antes.';
+      }
     }
   }else if(col==='categorias'){
     o.sinal=v('cad-sinal');
+    /* com lançamentos, trocar entrada por saída deixaria todos eles com a categoria do tipo errado */
+    if(ed && ed.sinal && o.sinal!==ed.sinal){
+      var usos=(S.financeiro||[]).filter(function(f){ return f.categoriaId===ed.id && f.tipo!==o.sinal; }).length;
+      if(usos) erros['cad-sinal']='Esta categoria tem '+usos+(usos===1?' lançamento':' lançamentos')+' de '+(ed.sinal==='entrada'?'entrada':'saída')+'. Para usar em '+(o.sinal==='entrada'?'entradas':'saídas')+', crie outra categoria.';
+    }
   }
   if(Object.keys(erros).length){ finErros(erros); finErroEm('cad-salvar','Revise os campos marcados.'); return; }
   finErroEm('cad-salvar','');
