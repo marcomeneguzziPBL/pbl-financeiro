@@ -569,10 +569,6 @@ body.dark .fin-tw .fin-tbl thead th{background:var(--card)}
 .fin-ctx .v.ent{color:var(--green)}
 .fin-ctx .v.sai{color:var(--red)}
 /* Transferência: Enviada | Recebida, e a opção de registrar a outra ponta junto */
-.fin-sent{display:inline-flex;border:1px solid var(--bd);border-radius:10px;overflow:hidden;margin:0 0 16px}
-.fin-sent button{font:inherit;font-size:14px;padding:9px 24px;border:0;background:var(--card);color:var(--tx);cursor:pointer}
-.fin-sent button+button{border-left:1px solid var(--bd)}
-.fin-sent button.on{background:var(--v);color:#fff;font-weight:600}
 .fin-par{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding:11px 14px;border-radius:8px;background:color-mix(in srgb,var(--fc) 7%,var(--card));font-size:13px;color:var(--tx);cursor:pointer}
 .fin-par input{width:16px;height:16px;margin:0;flex:none}
 .fin-par .sub{color:var(--mt)}
@@ -603,7 +599,7 @@ body.dark .fin-olho{background:none;border-color:transparent;color:var(--mt)}
 body.dark .fin-olho:hover{color:var(--tx);border-color:var(--bd)}
 .fin-olho svg{width:16px;height:16px;flex:none}
 /* Ocultar valores */
-body.fin-oculto .fin-cartao .s,body.fin-oculto .fin-kpis .mv,body.fin-oculto #fin-lista td.r,body.fin-oculto .fin-ctx .sd,body.fin-oculto .fin-ctx .dep,body.fin-oculto .fin-ctx .v,body.fin-oculto .fin-mv,body.fin-oculto .fcx-grande,body.fin-oculto .fcx-th td.r{filter:blur(7px);user-select:none}
+body.fin-oculto .fin-cartao .s,body.fin-oculto .fin-kpis .mv,body.fin-oculto #fin-lista td.r,body.fin-oculto #fin-flista td.r,body.fin-oculto .fin-flt .sd,body.fin-oculto .fin-ctx .sd,body.fin-oculto .fin-ctx .dep,body.fin-oculto .fin-ctx .v,body.fin-oculto .fin-mv,body.fin-oculto .fcx-grande,body.fin-oculto .fcx-th td.r{filter:blur(7px);user-select:none}
 /* Algarismos: 6 e 9 abertos (mais fáceis de distinguir do 8 e do 0) */
 body{font-feature-settings:"cv03" 1,"cv04" 1}
 .fcx-feito{display:flex;align-items:center;gap:10px;margin-top:14px;padding:10px 14px;border-radius:10px;font-size:14px}
@@ -886,6 +882,9 @@ body.dark .fin-cc-fun{background:var(--vl);color:var(--vt)}
 .fin-kpis .mc:last-child .fin-kdica{left:auto;right:10px}
 .fin-kpis .mc:last-child .fin-kdica::before{left:auto;right:16px}
 /* Formulário de lançamento: tipo no topo, duas linhas com larguras pelo conteúdo */
+.fin-flt{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;margin:22px 2px 8px;font-size:13px;color:var(--mt)}
+.fin-flt b{color:var(--tx);font-weight:600}
+.fin-flt .sd{color:var(--tx);font-weight:600;font-variant-numeric:tabular-nums}
 .fin-fg12{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:14px 16px;margin-bottom:16px}
 .fin-c2{grid-column:span 2}.fin-c3{grid-column:span 3}.fin-c4{grid-column:span 4}.fin-c5{grid-column:span 5}
 .fin-tipos{display:inline-flex;border:1px solid var(--bd);border-radius:10px;overflow:hidden;background:var(--card)}
@@ -1197,15 +1196,28 @@ function finValidaCampos(l){
   else if(!l.data) e['fin-data']='Informe a data.';
   if(isNaN(l.valor)) e['fin-valor']='Valor não reconhecido. Digite como 1.234,56.';
   else if(!(Number(l.valor)>0)) e['fin-valor']='Informe um valor maior que zero.';
-  if(!l.contaId) e['fin-conta']='Selecione a conta.';
-  else if(!c) e['fin-conta']='Conta não cadastrada.';
-  if(l.tipo==='transferencia'){
+  var dePara=l.tipo==='transferencia' && l._de!==undefined;
+  if(dePara){
+    /* formulário De → Para: os erros ficam no campo certo */
+    if(!l._de) e['fin-conta']='Escolha de qual conta o dinheiro saiu.';
+    if(!l._para) e['fin-outra']='Escolha para qual conta o dinheiro foi.';
+    if(l._de && l._para){
+      if(l._de===l._para) e['fin-outra']=l._de===FIN_FORA?'As duas estão como conta de fora: ao menos uma precisa ser da empresa.':'Escolha uma conta diferente da de origem.';
+      else if(!finInterna(l._de) && !finInterna(l._para)) e['fin-conta']='Ao menos uma das contas precisa ser da empresa.';
+      else if(!finInterna(l.contaId)) e[l.sentido==='saida'?'fin-conta':'fin-outra']='Esta transferência é da conta de '+(l.sentido==='saida'?'origem':'destino')+': escolha uma conta da empresa.';
+    }
+  }
+  else{
+    if(!l.contaId) e['fin-conta']='Selecione a conta.';
+    else if(!c) e['fin-conta']='Conta não cadastrada.';
+  }
+  if(l.tipo==='transferencia' && !dePara){   /* importação: cada linha é uma ponta, com conta, sentido e outra conta */
     if(l.sentido!=='entrada' && l.sentido!=='saida') e['fin-sentido']='Escolha se a transferência foi enviada ou recebida.';
     if(l.contraparteId){
       if(l.contraparteId===l.contaId) e['fin-outra']='A outra conta deve ser diferente da conta.';
       else{ dc=finCadById('contas',l.contraparteId); if(!dc) e['fin-outra']='Conta não cadastrada.'; }
     }
-  }else{
+  }else if(l.tipo!=='transferencia'){
     if(['entrada','saida'].indexOf(l.tipo)<0) e['fin-tipo']='Selecione o tipo do lançamento.';
     if(!l.categoriaId) e['fin-nat']='Selecione a categoria.';
     else{
@@ -1216,7 +1228,7 @@ function finValidaCampos(l){
   }
   if(String(l.descricao||'').length>FIN_DESC_MAX) e['fin-desc']='Use no máximo '+FIN_DESC_MAX+' caracteres. O que passar disso pode ir na observação.';
   if(l.data){
-    if(c && finExterna(c)) e['fin-conta']='A conta "'+c.nome+'" é externa e não recebe lançamentos.';
+    if(c && finExterna(c) && !dePara) e['fin-conta']='A conta "'+c.nome+'" é externa e não recebe lançamentos.';
     else if(c && l.data<finContaDataIni(c)) e['fin-data']='A conta "'+c.nome+'" começa em '+fmtDate(finContaDataIni(c))+'. Escolha uma data a partir daí.';
   }
   return e;
@@ -1715,7 +1727,8 @@ function finNovo(tipo,duplicando){
   _finNovo=tipo; _finEdit=null; navigate('financeiro');
   setTimeout(function(){
     finMainScroll(0);
-    var e=document.getElementById('fin-valor'); if(e&&e.focus) e.focus();
+    var c=document.getElementById('fin-conta'), e=document.getElementById('fin-valor');
+    if(c && !c.value) finCbFoca('fin-conta'); else if(e&&e.focus) e.focus();
   },0);
 }
 /* O que estava no formulário quando ele abriu: para saber se algo foi digitado antes de descartar. */
@@ -3023,8 +3036,8 @@ function finUltimoDe(contas){
 }
 /* Faixa de contexto do formulário: a conta, o saldo atual e o saldo depois deste lançamento (atualiza enquanto se digita). */
 function finFormCtxHtml(contaId,tipo,sentido,valor){
-  var c=contaId?finCadById('contas',contaId):null, cs=(c?[c]:finContasEscopo()).filter(function(x){ return x && !finExterna(x); });
-  if(!cs.length) return '';
+  var c=finInterna(contaId)?finCadById('contas',contaId):null, cs=c?[c]:[];
+  if(!cs.length) return '<span class="fin-ctx-a"><span class="cn">Escolha a conta para ver o saldo dela e o último lançamento.</span></span>';
   var hoje=todayStr(), saldo=0, tem=false;
   cs.forEach(function(x){ if(hoje>=finContaDataIni(x)){ saldo+=finSaldoConta(x,hoje); tem=true; } });
   saldo=Math.round(saldo*100)/100;
@@ -3050,35 +3063,47 @@ function finFormCtxHtml(contaId,tipo,sentido,valor){
 function finFormCtx(){
   var box=document.getElementById('fin-ctx'); if(!box) return;
   function v(id){ var e=document.getElementById(id); return e?e.value:''; }
-  var val=finParseVal(v('fin-valor'));
-  box.innerHTML=finFormCtxHtml(v('fin-conta'),v('fin-tipo'),v('fin-sentido'),(val&&isFinite(val))?Math.abs(val):0);
+  var val=finParseVal(v('fin-valor')), l=finLerForm();
+  box.innerHTML=finFormCtxHtml(l.contaId,l.tipo,l.sentido,(val&&isFinite(val))?Math.abs(val):0);
 }
 /* O texto da opção que cria a outra ponta junto com esta. */
-function finParTexto(sentido,contraId){
-  var n=contraId?finCadNome('contas',contraId):'';
-  return 'Registrar também a transferência '+(sentido==='entrada'?'enviada':'recebida')+' na '+esc(n)+' <span class="sub">(cria os dois lançamentos, ligados: alterar ou excluir um altera o outro)</span>';
+var FIN_FORA='__fora';   /* "conta de fora": o outro lado da transferência não está cadastrado */
+/* Conta da empresa (cadastrada e não externa): só nela o lançamento entra. */
+function finInterna(id){ var c=(id&&id!==FIN_FORA)?finCadById('contas',id):null; return !!(c && !finExterna(c)); }
+/* Opções de De e Para: contas da empresa, depois as externas cadastradas, e por último "conta de fora". */
+function finOptsTransf(sel){
+  var cs=finCad('contas').filter(function(c){ return c.id===sel || c.ativo!==false; });
+  function op(c){ var emp=finCadById('empresas',c.empresaId); return '<option value="'+c.id+'"'+(c.id===sel?' selected':'')+'>'+esc(c.nome)+' — '+esc(finExterna(c)?'externa':(emp?emp.nome:'sem empresa'))+(c.ativo===false?' (inativa)':'')+'</option>'; }
+  return '<option value=""'+(sel?'':' selected')+'>Selecione…</option>'+cs.filter(function(c){ return !finExterna(c); }).map(op).join('')+cs.filter(finExterna).map(op).join('')+
+    '<option value="'+FIN_FORA+'"'+(sel===FIN_FORA?' selected':'')+'>Conta de fora (não cadastrada)</option>';
 }
-/* Enviada ou Recebida: troca o botão, o rótulo da outra conta e o texto da opção de registrar a outra ponta. */
-function finSentido(s){
-  var h=document.getElementById('fin-sentido'); if(h) h.value=s;
-  ['saida','entrada'].forEach(function(k){ var b=document.getElementById('fin-sent-'+k); if(b){ b.className=(k===s?'on':''); b.setAttribute('aria-checked',k===s?'true':'false'); } });
-  var lb=document.getElementById('lb-fin-outra'); if(lb) lb.textContent=s==='entrada'?'Da conta (opcional)':'Para a conta (opcional)';
-  finOutraMudou(); finErroEm('fin-sentido',''); finFormCtx();
+/* O que vai ser gravado, em uma frase, conforme De e Para */
+function finTransfTexto(de,para,ed){
+  if(ed){ var p=finParDe(ed); return p?'A outra ponta desta transferência, na '+esc(finCadNome('contas',p.contaId))+', é alterada junto.':''; }
+  var a=finInterna(de), b=finInterna(para);
+  if(a&&b&&de!==para) return 'Vai registrar a saída na <b>'+esc(finCadNome('contas',de))+'</b> e a entrada na <b>'+esc(finCadNome('contas',para))+'</b>, ligadas: alterar ou excluir uma altera a outra.';
+  if(a&&para&&!b) return 'Vai registrar só a saída na <b>'+esc(finCadNome('contas',de))+'</b>: a conta de destino não é controlada aqui.';
+  if(b&&de&&!a) return 'Vai registrar só a entrada na <b>'+esc(finCadNome('contas',para))+'</b>: a conta de origem não é controlada aqui.';
+  return '';
 }
-/* Ao trocar a conta de origem, a lista da outra conta deixa de oferecer a nova origem (e solta a escolha se ela coincidir). */
-function finOutraAtualiza(){
-  var o=document.getElementById('fin-outra'), c=document.getElementById('fin-conta'); if(!o||!c) return;
-  var atual=o.value===c.value?'':o.value;
-  o.innerHTML=finOptsConta(atual,c.value,'outra'); o.value=atual;
-  var t=document.getElementById('cbt-fin-outra'), op=o.options[o.selectedIndex];
-  if(t){ t.textContent=finCbTxtCurto('fin-outra',op?op.textContent:''); if(t.classList){ if(!atual) t.classList.add('ph'); else t.classList.remove('ph'); } }
-  finOutraMudou();
+function finTransfMudou(){
+  var de=document.getElementById('fin-conta'), pa=document.getElementById('fin-outra'), box=document.getElementById('fin-par-box'), tx=document.getElementById('fin-par-txt');
+  var ed=_finEdit?(S.financeiro||[]).find(function(f){ return f.id===_finEdit; }):null, t=finTransfTexto(de?de.value:'',pa?pa.value:'',ed);
+  if(tx) tx.innerHTML=t; if(box) box.style.display=t?'':'none';
+  finFormCtx(); finFormLista();
 }
-function finOutraMudou(){
-  var o=document.getElementById('fin-outra'), box=document.getElementById('fin-par-box'), h=document.getElementById('fin-sentido'); if(!box) return;
-  var id=o?o.value:''; box.style.display=id?'':'none';
-  var tx=document.getElementById('fin-par-txt'); if(tx&&id) tx.innerHTML=finParTexto(h?h.value:'saida',id);
+/* Lista que fica embaixo do formulário: os lançamentos da conta escolhida no dia escolhido, com o saldo corrido */
+function finFormListaHtml(contaId,data){
+  var c=finInterna(contaId)?finCadById('contas',contaId):null;
+  if(!c||!data||data==='!') return '<div class="fin-flt">Escolha a conta e a data para ver aqui os lançamentos do dia.</div>';
+  var L=finLinhasDe([c],data,data), fim=data>=finContaDataIni(c)?finSaldoConta(c,data):null;
+  var corpo=L.map(function(x){ return finLinhaHtml(x,true,true); }).join('')||'<tr><td colspan="6" class="empty">Nenhum lançamento nesta conta neste dia.</td></tr>';
+  return '<div class="fin-flt"><span>Lançamentos da <b>'+esc(c.nome)+'</b> em <b>'+fmtDate(data)+'</b> ('+finDiaSemana(data).toLowerCase()+')</span>'+
+      (fim!==null?'<span>· saldo no fim do dia <span class="sd"'+(fim<0?' style="color:var(--red)"':'')+'>'+fmt(fim)+'</span></span>':'')+'</div>'+
+    '<div class="card fin-tw"><table class="tbl fin-tbl"><colgroup><col style="width:100px"><col><col style="width:18%"><col style="width:160px"><col style="width:150px"><col style="width:44px"></colgroup>'+
+    '<thead><tr><th class="fin-dt">Data</th><th>Descrição</th><th>Categoria</th><th class="r">Valor</th><th class="r">Saldo</th><th></th></tr></thead><tbody>'+corpo+'</tbody></table></div>';
 }
+function finFormLista(){ var b=document.getElementById('fin-flista'); if(!b) return; var l=finLerForm(); b.innerHTML=finFormListaHtml(l.contaId,l.data); }
 /* Com estorno (o lançamento estornado ou o próprio estorno), valor, conta e categoria ficam travados: os dois precisam continuar se anulando. */
 function finFormHtml(){
   var h=_finFormHtmlBase(), ed=_finEdit?(S.financeiro||[]).find(function(f){ return f.id===_finEdit; }):null;
@@ -3095,9 +3120,17 @@ function _finFormHtmlBase(){
   var tp=(!ed&&!cl&&_finTroca&&_finTroca.tipo===_finNovo)?_finTroca:null;   /* trocou o tipo no seletor: mantém o que já foi digitado */
   var bs=ed||cl||tp;
   var tipo=ed?ed.tipo:_finNovo, tr=tipo==='transferencia', u=_finUltimo||{};
-  var sentido=tr?(bs&&bs.sentido?bs.sentido:(u.sentido||'saida')):'', contraSel=tr?(bs?(bs.contraparteId||''):(u.contraparteId||'')):'';
   var escopo=finContasEscopo();
-  var contaSel=bs&&bs.contaId?bs.contaId:(escopo.length===1?escopo[0].id:(u.contaId&&escopo.some(function(c){return c.id===u.contaId;})?u.contaId:''));
+  /* conta: a do lançamento; senão a última usada no "Salvar e novo"; senão a única conta marcada */
+  var contaSel=bs&&bs.contaId?bs.contaId:((u.contaId&&finInterna(u.contaId))?u.contaId:(escopo.length===1?escopo[0].id:''));
+  /* transferência: De → Para. Uma ponta gravada é vista do lado dela: a enviada é a conta De, a recebida é a conta Para */
+  var deSel='', paraSel='';
+  if(tr){
+    var ref=bs||(u.contaId?u:null), fora=(bs&&!tp)?FIN_FORA:'';
+    if(ref && ref.sentido==='entrada'){ deSel=ref.contraparteId||fora; paraSel=ref.contaId||''; }
+    else if(ref){ deSel=ref.contaId||''; paraSel=ref.contraparteId||(ref.sentido?fora:''); }
+    else deSel=contaSel;
+  }
   var nomeTipo={entrada:'entrada',saida:'saída',transferencia:'transferência'}[tipo];
   var titulo=ed?'Alterar '+nomeTipo:'Nova '+nomeTipo+(cl?' (cópia)':'');
   var nv=bs?Number(bs.valor):NaN, valor=(bs&&bs.valor!==''&&isFinite(nv))?Math.abs(nv).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}):'';
@@ -3110,38 +3143,44 @@ function _finFormHtmlBase(){
     var on=k===tipo, rot={entrada:'Entrada',saida:'Saída',transferencia:'Transferência'}[k];
     return '<button type="button" role="radio" class="'+(on?'on':'')+'" aria-checked="'+on+'"'+(ed&&!on?' disabled title="O tipo de um lançamento salvo não muda"':'')+(ed?'':' onclick="finTrocaTipo(\''+k+'\')"')+'>'+rot+'</button>';
   }).join('')+'</div>';
-  /* duas linhas, larguras pelo conteúdo: Valor · Descrição · Categoria (ou a outra conta) / Conta · Data · Observação */
-  var terceiro=tr?finFcb(sentido==='entrada'?'Da conta (opcional)':'Para a conta (opcional)',finOptsConta(contraSel===contaSel?'':contraSel,contaSel,'outra'),'fin-outra','finOutraMudou()')
-                 :finFcb('Categoria *',finOptsCategoria(tipo,bs?bs.categoriaId:''),'fin-nat');
+  /* a ponta gravada (na transferência) e a conta que o contexto e a lista do dia mostram */
+  var contaLado=tr?(ed?ed.contaId:(finInterna(deSel)?deSel:(finInterna(paraSel)?paraSel:''))):contaSel;
+  var sentidoLado=tr?(ed?ed.sentido:(finInterna(deSel)?'saida':'entrada')):'';
   var nDesc=bs&&bs.descricao?bs.descricao.length:0;
   var clsTipo={entrada:'t-entrada',saida:'t-saida',transferencia:'t-transferencia'}[tipo];   /* escritas por extenso para o estilo não ser considerado sem uso */
-  var ctx=ed?'':'<div class="fin-ctx" id="fin-ctx">'+finFormCtxHtml(contaSel,tipo,sentido,bs?Math.abs(Number(bs.valor)||0):0)+'</div>';
+  var ctx=ed?'':'<div class="fin-ctx" id="fin-ctx">'+finFormCtxHtml(contaLado,tipo,sentidoLado,bs?Math.abs(Number(bs.valor)||0):0)+'</div>';
+  /* linha 1, o que muda pouco de um lançamento para o outro: conta (ou De e Para) e data */
+  var cData='<div class="fg"><label for="dpt-fin-data">Data *</label>'+finDp('fin-data',dataSel,{oninput:'finDataAviso()',onchange:'finDataAviso();finFormLista()',atalhos:'dentro',rotulo:'Data'})+'<div class="fin-aviso" id="avi-fin-data" role="status"></div><div class="fin-err" id="err-fin-data" role="alert"></div></div>';
+  var linha1=tr
+    ?'<div class="fin-c4">'+finFcb('De (conta) *',finOptsTransf(deSel),'fin-conta','finTransfMudou()')+'</div>'+
+     '<div class="fin-c4">'+finFcb('Para (conta) *',finOptsTransf(paraSel),'fin-outra','finTransfMudou()')+'</div>'+
+     '<div class="fin-c4">'+cData+'</div>'
+    :'<div class="fin-c4">'+finFcb('Conta *',finOptsConta(contaSel,'','origem'),'fin-conta','finFormCtx();finFormLista()')+'</div>'+
+     '<div class="fin-c5">'+cData+'</div>';
+  /* linha 2, o que muda a cada linha do extrato: valor, descrição, categoria e observação */
+  var cValor=fc('Valor (R$) *','<input type="text" inputmode="decimal" id="fin-valor" value="'+esc(valor)+'" placeholder="0,00" autocomplete="off" onfocus="this.select()" oninput="finValorEntrada(this);finFormCtx()" onblur="finValorBlur(\'fin-valor\')"/>','fin-valor');
+  var cDesc=fc('Descrição','<input type="text" id="fin-desc" value="'+esc(bs?(bs.descricao||''):'')+'" placeholder="Opcional" maxlength="'+FIN_DESC_MAX+'" oninput="finDescEntrada(this)" autocomplete="off"/>'+
+        '<div class="fin-cont" id="cont-fin-desc"'+(nDesc>=FIN_DESC_AVISO?'':' style="display:none"')+'>'+nDesc+'/'+FIN_DESC_MAX+'</div>','fin-desc');
+  var cObs=fc('Observação','<input type="text" id="fin-obs" maxlength="300" value="'+esc(bs?(bs.obs||''):'')+'" placeholder="Opcional"/>','fin-obs');
+  var linha2='<div class="fin-c2">'+cValor+'</div>'+
+    (tr?'<div class="fin-c5">'+cDesc+'</div><div class="fin-c5">'+cObs+'</div>'
+       :'<div class="fin-c4">'+cDesc+'</div><div class="fin-c3">'+finFcb('Categoria *',finOptsCategoria(tipo,bs?bs.categoriaId:''),'fin-nat')+'</div><div class="fin-c3">'+cObs+'</div>');
+  var txtTr=tr?finTransfTexto(deSel,paraSel,ed):'';
   return '<div class="card fin-formc '+clsTipo+'" id="fin-form" role="region" aria-label="'+titulo+'">'+
     '<div class="fin-fh"><div class="fin-ft">'+(ed?'<h2>Alterar lançamento</h2>':'')+tipos+(cl?'<span class="fin-copia">cópia</span>':'')+'</div>'+
       '<button type="button" class="fin-fx" aria-label="Fechar sem salvar" title="Fechar (Esc)" onclick="finPedeCancelar()">×</button></div>'+
-    '<input type="hidden" id="fin-tipo" value="'+tipo+'"/>'+ctx+
-    (tr?'<div class="fin-sent" role="radiogroup" aria-label="Sentido da transferência">'+
-      '<button type="button" role="radio" id="fin-sent-saida" class="'+(sentido==='saida'?'on':'')+'" aria-checked="'+(sentido==='saida')+'" onclick="finSentido(\'saida\')">Enviada</button>'+
-      '<button type="button" role="radio" id="fin-sent-entrada" class="'+(sentido==='entrada'?'on':'')+'" aria-checked="'+(sentido==='entrada')+'" onclick="finSentido(\'entrada\')">Recebida</button></div>'+
-      '<input type="hidden" id="fin-sentido" value="'+sentido+'"/><div class="fin-err" id="err-fin-sentido" role="alert"></div>':'')+
-    '<div class="fin-fg12">'+
-      '<div class="fin-c2">'+fc('Valor (R$) *','<input type="text" inputmode="decimal" id="fin-valor" value="'+esc(valor)+'" placeholder="0,00" autocomplete="off" onfocus="this.select()" oninput="finValorEntrada(this);finFormCtx()" onblur="finValorBlur(\'fin-valor\')"/>','fin-valor')+'</div>'+
-      '<div class="fin-c5">'+fc('Descrição','<input type="text" id="fin-desc" value="'+esc(bs?(bs.descricao||''):'')+'" placeholder="Opcional" maxlength="'+FIN_DESC_MAX+'" oninput="finDescEntrada(this)" autocomplete="off"/>'+
-        '<div class="fin-cont" id="cont-fin-desc"'+(nDesc>=FIN_DESC_AVISO?'':' style="display:none"')+'>'+nDesc+'/'+FIN_DESC_MAX+'</div>','fin-desc')+'</div>'+
-      '<div class="fin-c5">'+terceiro+'</div>'+
-      '<div class="fin-c3">'+finFcb('Conta *',finOptsConta(contaSel,'','origem'),'fin-conta',tr?'finFormCtx();finOutraAtualiza()':'finFormCtx()')+'</div>'+
-      '<div class="fin-c5"><div class="fg"><label for="dpt-fin-data">Data *</label>'+finDp('fin-data',dataSel,{oninput:'finDataAviso()',onchange:'finDataAviso()',atalhos:'dentro',rotulo:'Data'})+'<div class="fin-aviso" id="avi-fin-data" role="status"></div><div class="fin-err" id="err-fin-data" role="alert"></div></div></div>'+
-      '<div class="fin-c4">'+fc('Observação','<input type="text" id="fin-obs" maxlength="300" value="'+esc(bs?(bs.obs||''):'')+'" placeholder="Opcional"/>','fin-obs')+'</div>'+
-    '</div>'+
-    ((tr&&ed&&finParDe(ed))?'<div class="fin-par" style="cursor:default">A outra ponta desta transferência, na '+esc(finCadNome('contas',finParDe(ed).contaId))+', é alterada junto.</div>':'')+
-    ((tr&&!ed)?'<label class="fin-par" id="fin-par-box"'+(contraSel?'':' style="display:none"')+'><input type="checkbox" id="fin-par" checked/><span id="fin-par-txt">'+finParTexto(sentido,contraSel)+'</span></label>':'')+
+    '<input type="hidden" id="fin-tipo" value="'+tipo+'"/>'+(ed&&tr?'<input type="hidden" id="fin-sentido" value="'+esc(ed.sentido||'')+'"/>':'')+ctx+
+    '<div class="fin-fg12">'+linha1+'</div>'+
+    '<div class="fin-fg12">'+linha2+'</div>'+
+    (tr?'<div class="fin-par" id="fin-par-box" style="cursor:default'+(txtTr?'':';display:none')+'"><span id="fin-par-txt">'+txtTr+'</span></div>':'')+
     '<div class="fin-linb">'+
       '<button class="btn bp" id="fin-salvar" type="button" onclick="addFin(false)">'+(ed?'Salvar alteração':'Salvar')+'</button>'+
       (ed?'':'<button class="btn fin-b2" onclick="addFin(true)" type="button">Salvar e novo</button>')+
       '<button type="button" class="fin-cancelar" onclick="finPedeCancelar()">Cancelar</button>'+
       '<span class="fin-dica">* obrigatório · Enter '+(ed?'salva':'salva e abre um novo')+' · Esc cancela</span>'+
     '</div>'+
-    '<div class="fin-err" id="err-fin-salvar" role="alert" style="margin-top:8px"></div></div>';
+    '<div class="fin-err" id="err-fin-salvar" role="alert" style="margin-top:8px"></div></div>'+
+    '<div id="fin-flista">'+finFormListaHtml(contaLado,dataSel)+'</div>';
 }
 /* Trocar o tipo no seletor do topo: o formulário muda, e valor, descrição, conta, data e observação continuam. */
 var _finTroca=null, FIN_DESC_AVISO=45;
@@ -3186,7 +3225,7 @@ function finValorLinha(L){
   if(e<0) return {t:'− '+fmt(-e),cor:tr?'neutra':'sai'};
   return {t:fmt(e),cor:tr?'neutra':'ent'};
 }
-function finLinhaHtml(L,unica){
+function finLinhaHtml(L,unica,semAcoes){
   var f=L.f, v=Number(f.valor)||0, tr=finEhTransferencia(f);
   var origem=finCadNome('contas',f.contaId), outra=f.contraparteId?finCadNome('contas',f.contraparteId):'';
   var sub=[];
@@ -3217,7 +3256,7 @@ function finLinhaHtml(L,unica){
     (unica?'':'<td><span class="fin-ell" title="'+esc(origem)+'">'+esc(origem)+'</span></td>')+
     celulas+
     '<td class="r fin-sl"'+(L.saldo<0?' style="color:var(--red)"':'')+'>'+fmt(L.saldo)+'</td>'+
-    '<td class="fin-ac">'+acoes.join('')+'</td></tr>';
+    '<td class="fin-ac">'+(semAcoes?'':acoes.join(''))+'</td></tr>';
 }
 
 /* Para cada dia da lista: quantas das contas à vista já fecharam o caixa (e quantas com ressalva). */
@@ -3707,10 +3746,18 @@ function finLerForm(){
   /* vale o que está escrito no campo: se a pessoa digitou uma data inválida, o valor anterior não pode ser salvo no lugar */
   var dt=document.getElementById('dpt-fin-data');
   if(dt){ var lida=finDpLe(dt.value,data||todayStr()); data=lida===null?'!':lida; }
+  /* transferência: a ponta gravada é a saída da conta De (se for da empresa) ou a entrada da conta Para; na alteração, o lado não muda */
+  var de=v('fin-conta'), para=v('fin-outra'), sentido='', conta=de, outra='';
+  if(tipo==='transferencia'){
+    sentido=v('fin-sentido')||(finInterna(de)?'saida':'entrada');
+    conta=sentido==='saida'?de:para; outra=sentido==='saida'?para:de;
+    if(conta===FIN_FORA) conta=''; if(outra===FIN_FORA) outra='';
+  }
   return {
-    tipo:tipo, sentido: tipo==='transferencia'?v('fin-sentido'):'', data:data, valor:finParseVal(v('fin-valor')),
-    contaId:v('fin-conta'),
-    contraparteId: tipo==='transferencia'?v('fin-outra'):'',
+    tipo:tipo, sentido:sentido, data:data, valor:finParseVal(v('fin-valor')),
+    _de:tipo==='transferencia'?de:undefined, _para:tipo==='transferencia'?para:undefined,
+    contaId:conta,
+    contraparteId:outra,
     categoriaId: tipo==='transferencia'?'':v('fin-nat'),
     descricao:(v('fin-desc')||'').trim(),
     obs:(v('fin-obs')||'').trim()
@@ -3748,7 +3795,7 @@ async function addFin(manter){
 }
 async function addFinFaz(manter){
   var l=finLerForm(), orig=null;
-  var parEl=document.getElementById('fin-par'), par=!!(!_finEdit && l.tipo==='transferencia' && l.contraparteId && parEl && parEl.checked);
+  var par=!!(!_finEdit && l.tipo==='transferencia' && finInterna(l.contaId) && finInterna(l.contraparteId));   /* De e Para da empresa: grava as duas pontas */
   if(_finEdit){
     orig=(S.financeiro||[]).find(function(f){return f.id===_finEdit;});
     if(orig){
