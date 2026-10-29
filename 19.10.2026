@@ -516,6 +516,7 @@ body.dark .fin-formc{border:1px solid var(--fc);border-top:6px solid var(--fc);b
 .fin-formc .fg input:focus,.fin-formc .fg select:focus{border-color:var(--fc);box-shadow:0 0 0 3px color-mix(in srgb,var(--fc) 20%,transparent)}
 .fin-formc .btn{height:48px;padding:0 28px;font-size:15px;border-radius:8px}
 .fin-formc .fin-dica{margin-left:auto;font-size:12px;color:var(--mt)}
+.fin-obr{color:var(--d);font-weight:700}
 
 @media(max-width:900px){.fin-fg12>div{grid-column:span 12}.fin-formc .fin-dica{margin-left:0}}
 /* Lista com busca (no lugar do select do navegador) */
@@ -3166,7 +3167,7 @@ function _finFormHtmlBase(){
     (tr?'<div class="fin-c5">'+cDesc+'</div><div class="fin-c5">'+cObs+'</div>'
        :'<div class="fin-c4">'+cDesc+'</div><div class="fin-c3">'+finFcb('Categoria *',finOptsCategoria(tipo,bs?bs.categoriaId:''),'fin-nat')+'</div><div class="fin-c3">'+cObs+'</div>');
   var txtTr=tr?finTransfTexto(deSel,paraSel,ed):'';
-  return '<div class="card fin-formc '+clsTipo+'" id="fin-form" role="region" aria-label="'+titulo+'">'+
+  var html='<div class="card fin-formc '+clsTipo+'" id="fin-form" role="region" aria-label="'+titulo+'">'+
     '<div class="fin-fh"><div class="fin-ft">'+(ed?'<h2>Alterar lançamento</h2>':'')+tipos+(cl?'<span class="fin-copia">cópia</span>':'')+'</div>'+
       '<button type="button" class="fin-fx" aria-label="Fechar sem salvar" title="Fechar (Esc)" onclick="finPedeCancelar()">×</button></div>'+
     '<input type="hidden" id="fin-tipo" value="'+tipo+'"/>'+(ed&&tr?'<input type="hidden" id="fin-sentido" value="'+esc(ed.sentido||'')+'"/>':'')+ctx+
@@ -3174,13 +3175,14 @@ function _finFormHtmlBase(){
     '<div class="fin-fg12">'+linha2+'</div>'+
     (tr?'<div class="fin-par" id="fin-par-box" style="cursor:default'+(txtTr?'':';display:none')+'"><span id="fin-par-txt">'+txtTr+'</span></div>':'')+
     '<div class="fin-linb">'+
-      '<button class="btn bp" id="fin-salvar" type="button" onclick="addFin(false)">'+(ed?'Salvar alteração':'Salvar')+'</button>'+
-      (ed?'':'<button class="btn fin-b2" onclick="addFin(true)" type="button">Salvar e novo</button>')+
-      '<button type="button" class="fin-cancelar" onclick="finPedeCancelar()">Cancelar</button>'+
-      '<span class="fin-dica">* obrigatório · Enter '+(ed?'salva':'salva e abre um novo')+' · Esc cancela</span>'+
+      '<button class="btn bp" id="fin-salvar" type="button" onclick="addFin(false)"'+(ed?' title="Atalho: Enter"':'')+'>'+(ed?'Salvar alteração':'Salvar')+'</button>'+
+      (ed?'':'<button class="btn fin-b2" onclick="addFin(true)" type="button" title="Atalho: Enter">Salvar e novo</button>')+
+      '<button type="button" class="fin-cancelar" onclick="finPedeCancelar()" title="Atalho: Esc">Cancelar</button>'+
+      '<span class="fin-dica"><span class="fin-obr" aria-hidden="true">*</span> obrigatório</span>'+
     '</div>'+
     '<div class="fin-err" id="err-fin-salvar" role="alert" style="margin-top:8px"></div></div>'+
     '<div id="fin-flista">'+finFormListaHtml(contaLado,dataSel)+'</div>';
+  return html.split(' *</label>').join(' <span class="fin-obr" aria-hidden="true">*</span></label>');   /* asterisco de obrigatório na cor de destaque */
 }
 /* Trocar o tipo no seletor do topo: o formulário muda, e valor, descrição, conta, data e observação continuam. */
 var _finTroca=null, FIN_DESC_AVISO=45;
