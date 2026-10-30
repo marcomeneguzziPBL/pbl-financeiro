@@ -305,11 +305,7 @@ body.dark .btn.danger{color:#2a0d0d}
 .fin-cartao{text-align:left;padding:10px 14px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:10px;cursor:pointer;min-width:176px;display:flex;flex-direction:column;gap:1px}
 .fin-cartao:hover{border-color:var(--d)}
 .fin-cartao:focus-visible{outline:2px solid var(--d);outline-offset:1px}
-.fin-cartao.on{border:2px solid var(--v);padding:9px 13px;color:#fff}
-.fin-cartao.on .n,.fin-cartao.on .s{color:#fff}
-.fin-cartao.on .e{color:rgba(255,255,255,.72)}
-.fin-cartao.on .fin-cx{color:#fff;border-color:rgba(255,255,255,.35)}
-.fin-cartao.on .fin-cx:hover{border-color:#fff}
+.fin-cartao.on{border:2px solid var(--v);padding:9px 13px;background:color-mix(in srgb,var(--v) 5%,var(--card))}
 .fin-cartao .n{font-size:13px;font-weight:700;padding-right:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fin-cartao .e{font-size:12px;color:var(--mt)}
 .fin-cartao .s{font-size:18px;font-weight:700;margin:5px 0 6px;font-variant-numeric:tabular-nums}
@@ -349,7 +345,7 @@ body.dark .btn.danger{color:#2a0d0d}
 .fin-dica{font-size:12px;color:var(--mt);margin:0 0 12px}
 .fin-cartao{position:relative}
 .fin-cartao .chk{position:absolute;top:9px;right:10px;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:transparent}
-.fin-cartao.on .chk{background:#fff;border-color:#fff;color:var(--v)}
+.fin-cartao.on .chk{background:var(--v);border-color:var(--v);color:#fff}
 .fin-cartao.off{opacity:.6}
 /* lista de lançamentos: colunas de largura fixa, texto longo quebra dentro da célula */
 .fin-tbl{table-layout:fixed}
@@ -409,10 +405,7 @@ body.dark .badge.b-venda,body.dark .badge.b-desp{background:none}
 /* Fechar caixa */
 .fcx-contas{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px;margin-bottom:14px}
 .fcx-conta{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px;cursor:pointer}
-.fcx-conta.on{border:2px solid var(--v);padding:11px 13px;color:#fff}
-.fcx-conta.on .n,.fcx-conta.on .s,.fcx-conta.on .cx{color:#fff}
-.fcx-conta.on .e{color:rgba(255,255,255,.72)}
-.fcx-conta.on .cx.info::before{background:rgba(255,255,255,.6)}
+.fcx-conta.on{border:2px solid var(--v);padding:11px 13px;background:color-mix(in srgb,var(--v) 5%,var(--card))}
 .fcx-conta .n{font-weight:700;font-size:14px}
 .fcx-conta .e{font-size:12px;color:var(--mt)}
 .fcx-conta .s{font-size:18px;font-weight:600;margin:4px 0;font-variant-numeric:tabular-nums}
@@ -516,6 +509,12 @@ body.dark .fin-formc{border:1px solid var(--fc);border-top:6px solid var(--fc);b
 .fin-formc .fg input:focus,.fin-formc .fg select:focus{border-color:var(--fc);box-shadow:0 0 0 3px color-mix(in srgb,var(--fc) 20%,transparent)}
 .fin-formc .btn{height:48px;padding:0 28px;font-size:15px;border-radius:8px}
 .fin-formc .fin-dica{margin-left:auto;font-size:12px;color:var(--mt)}
+.fin-fat{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:-4px 0 12px;font-size:13px}
+.fin-fat .t{color:var(--mt);margin-right:2px}
+.fin-fchip{text-transform:none;letter-spacing:normal;font-weight:500;border:1px solid var(--v);background:color-mix(in srgb,var(--v) 8%,var(--card));color:var(--tx);border-radius:999px;padding:3px 10px;font:inherit;font-size:13px;cursor:pointer}
+.fin-fchip:hover{background:color-mix(in srgb,var(--v) 16%,var(--card))}
+.fin-fchip span{color:var(--mt);margin-left:2px}
+.fin-flimpa{border:0;background:none;color:var(--blue);text-decoration:underline;text-underline-offset:3px;font:inherit;font-size:13px;cursor:pointer;padding:3px 4px}
 .fin-obr{color:var(--d);font-weight:700}
 
 @media(max-width:900px){.fin-fg12>div{grid-column:span 12}.fin-formc .fin-dica{margin-left:0}}
@@ -583,8 +582,6 @@ body.dark .fin-tw .fin-tbl thead th{background:var(--card)}
 .fin-cx.alerta{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 45%,var(--bd))}
 .fin-cx.alerta::before{background:var(--amber)}
 .fin-cx.fixo{cursor:default}
-.fin-cartao.on .fin-cx.alerta{color:#F3D9A9;border-color:rgba(243,217,169,.55)}
-.fin-cartao.on .fin-cx.alerta::before{background:#F3D9A9}
 .fin-aten{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin:0 0 12px;padding:10px 14px;border:1px solid color-mix(in srgb,var(--amber) 35%,var(--bd));border-radius:12px;background:var(--amberl);color:var(--amber);font-size:13px}
 .fin-aten .t{font-weight:600;margin-right:4px}
 .fin-aten button{font:inherit;font-size:12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:999px;padding:4px 11px;cursor:pointer}
@@ -616,8 +613,6 @@ body{font-feature-settings:"cv03" 1,"cv04" 1}
 .fin-copia svg{width:15px;height:15px}
 .fin-cartao .fin-cxs{margin-right:30px}   /* o aviso do caixa nunca encosta no botão de copiar */
 .fin-copia:hover,.fin-copia:focus-visible{opacity:1;color:var(--tx);background:color-mix(in srgb,var(--tx) 8%,transparent)}
-.fin-cartao.on .fin-copia{color:#fff}
-.fin-cartao.on .fin-copia:hover,.fin-cartao.on .fin-copia:focus-visible{background:rgba(255,255,255,.14)}
 
 .fcx-acs{display:inline-flex;align-items:center;gap:6px}
 .fin-sit.s-fer::before{background:var(--mt)}
@@ -693,8 +688,8 @@ body{font-feature-settings:"cv03" 1,"cv04" 1}
 .fin-fech-dia span{color:var(--mt);font-size:12px}
 /* Destaques da marca (topo do cartão de conta, conta marcada em Lançamentos e no Fechar caixa, Saldo final): degradê leve, da esquerda para a direita,
    no próprio verde da marca (#062E2B) e um tom dele só um pouco mais claro, misturado em OKLab para a passagem ficar uniforme */
-.fin-cc-top,.fin-cartao.on,.fin-kpis .mc.hero,.fcx-conta.on{background:linear-gradient(90deg,#0B4540 0%,#062E2B 100%);background:linear-gradient(in oklab 90deg,#0B4540 0%,#062E2B 100%)}
-body.dark .fin-cc-top,body.dark .fin-cartao.on,body.dark .fin-kpis .mc.hero,body.dark .fcx-conta.on{background:linear-gradient(90deg,#2B6560 0%,#1E5A55 100%);background:linear-gradient(in oklab 90deg,#2B6560 0%,#1E5A55 100%)}
+.fin-cc-top,.fin-kpis .mc.hero{background:linear-gradient(90deg,#0B4540 0%,#062E2B 100%);background:linear-gradient(in oklab 90deg,#0B4540 0%,#062E2B 100%)}
+body.dark .fin-cc-top,body.dark .fin-kpis .mc.hero{background:linear-gradient(90deg,#2B6560 0%,#1E5A55 100%);background:linear-gradient(in oklab 90deg,#2B6560 0%,#1E5A55 100%)}
 .fin-cc-top::before{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:linear-gradient(90deg,rgba(214,164,92,0) 0%,rgba(214,164,92,.9) 35%,rgba(228,182,111,.9) 65%,rgba(214,164,92,0) 100%);pointer-events:none}
 /* Lista com cara de planilha: linhas de grade, linhas mais baixas, zebrado, cabeçalho cinza e linha de total */
 #fin-lista .fin-tbl tbody tr:not(.fin-dia) td{padding-top:5px;padding-bottom:5px;border-bottom:1px solid var(--bd)}
@@ -747,7 +742,9 @@ body:not(.dark) .fin-ccard{border-color:var(--bd);box-shadow:0 1px 2px rgba(6,46
 .fin-kpis .mc .ml::before{content:'';width:8px;height:8px;border-radius:50%;background:#A9B8B3;flex:none}
 .fin-kpis .mc.green .ml::before{background:var(--green)}
 .fin-kpis .mc.red .ml::before{background:var(--red)}
-.fin-kpis .mc.blue .ml::before,.fin-kpis .mc.hero .ml::before{background:var(--d)}
+.fin-kpis .mc.blue .ml::before{background:#3D6FA6}   /* transferência: azul, nem ganho nem gasto */
+body.dark .fin-kpis .mc.blue .ml::before{background:#8FB4E3}
+.fin-kpis .mc.hero .ml::before{background:var(--d)}
 /* menu lateral: os itens de Cadastros alinhados com os de Financeiro */
 .sb-children{padding-left:0!important;margin-left:0!important}
 .sb-children{flex-direction:column}
@@ -1075,7 +1072,8 @@ async function loadData(){
 
 // ── UTILS ──────────────────────────────────────────────────
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
-function fmt(v){return'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
+/* Negativo sempre como "− R$ 1.234,56" (o mesmo formato na lista, nos saldos, nos cartões e no fechamento) */
+function fmt(v){var n=Number(v||0),s='R$ '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});return Math.round(n*100)<0?'− '+s:s;}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2);}
 function showToast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},1400);}
 function toggleTheme(){
@@ -1819,7 +1817,7 @@ function finContasFechar(){ return finCad('contas').filter(function(c){ return !
 function finCaixaChave(cid,data){ return cid+'_'+data; }
 function finCaixaDoDia(cid,data){ return (S.finCaixa||[]).find(function(r){ return r.contaId===cid && r.data===data; })||null; }
 function finFechContaSel(){ var cs=finContasFechar(); return cs.filter(function(c){ return c.id===_fechConta; })[0]||cs[0]||null; }
-function finNumBR(v){ return fmt(v).replace(/^R\$\s*/,''); }
+function finNumBR(v){ return Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }   /* para o campo: com o hífen que o campo entende */
 /* O dia em conferência: o dia escolhido numa linha da tabela, ou o último dia do período (até hoje). */
 /* Abre um dia do período para conferir, sem sair do período: a tabela continua a mesma. */
 /* Quantos lançamentos de cada tipo a conta teve no dia. */
@@ -2625,7 +2623,7 @@ async function finImportaGrava(){
 }
 
 /* ── PDF ── gerado aqui mesmo (fonte Helvetica, sem depender de nada) ── */
-var FIN_CP1252={0x20AC:128,0x201A:130,0x0192:131,0x201E:132,0x2026:133,0x2020:134,0x2021:135,0x02C6:136,0x2030:137,0x0160:138,0x2039:139,0x0152:140,0x017D:142,0x2018:145,0x2019:146,0x201C:147,0x201D:148,0x2022:149,0x2013:150,0x2014:151,0x02DC:152,0x2122:153,0x0161:154,0x203A:155,0x0153:156,0x017E:158,0x0178:159,0x2212:45,0x2192:62,0x21C4:60};
+var FIN_CP1252={0x2212:45,0x20AC:128,0x201A:130,0x0192:131,0x201E:132,0x2026:133,0x2020:134,0x2021:135,0x02C6:136,0x2030:137,0x0160:138,0x2039:139,0x0152:140,0x017D:142,0x2018:145,0x2019:146,0x201C:147,0x201D:148,0x2022:149,0x2013:150,0x2014:151,0x02DC:152,0x2122:153,0x0161:154,0x203A:155,0x0153:156,0x017E:158,0x0178:159,0x2212:45,0x2192:62,0x21C4:60};
 function finPdfCodifica(s){
   var o=[], i, c;
   for(i=0;i<s.length;i++){ c=s.charCodeAt(i); o.push(c<32?32:(c<127?c:((c>=160&&c<=255)?c:(FIN_CP1252[c]||(c===127?32:63))))); }
@@ -2858,13 +2856,13 @@ function finAtencaoHtml(){
     var rf=finCaixasARefazer(c.id).sort(function(a,b){ return a.data<b.data?-1:1; });
     if(rf.length){ n++; itens.push('<button onclick="finIrFecharDiaConta(\''+c.id+'\',\''+rf[0].data+'\')" title="O saldo do sistema mudou depois do fechamento. Abre o Fechar caixa no mais antigo ('+fmtDate(rf[0].data)+')">'+esc(c.nome)+' · '+rf.length+(rf.length===1?' fechamento a refazer':' fechamentos a refazer')+'</button>'); }
     var pd=finParado(c);
-    if(pd){ n++; itens.push('<button onclick="finSoConta(\''+c.id+'\')" title="Conta de passagem com saldo sem repasse desde '+fmtDate(pd.desde)+'">'+esc(c.nome)+' · <span class="fin-mv">'+fmt(pd.valor)+'</span> parado há '+pd.n+' dias</button>'); }
+    if(pd){ n++; itens.push('<button onclick="finSoConta(\''+c.id+'\')" title="Vinculada ao fundo com saldo sem repasse desde '+fmtDate(pd.desde)+'">'+esc(c.nome)+' · <span class="fin-mv">'+fmt(pd.valor)+'</span> sem repasse há '+pd.n+' dias úteis</button>'); }
   });
   var semcp=(S.financeiro||[]).filter(function(f){ return finEhTransferencia(f) && f.contraparteId && ids[f.contaId] && !finTemPar(f); })
     .sort(function(a,b){ return a.data<b.data?1:(a.data>b.data?-1:0); });
   n+=semcp.length;
-  semcp.slice(0,3).forEach(function(f){ var dv=finParDiverge(f); itens.push('<button onclick="finIrPara(\''+f.id+'\')" title="'+(dv?'A outra ponta existe, mas o valor ou a conta não batem mais (uma das pontas foi alterada)':'Transferência com a outra conta informada, mas sem a outra ponta')+'">'+fmtDate(f.data).slice(0,5)+' · '+(dv?'transferência diferente da outra ponta':'transferência sem contrapartida')+' · '+esc(finCadNome('contas',f.contaId))+'</button>'); });
-  if(semcp.length>3) itens.push('<span class="mais">e mais '+(semcp.length-3)+' sem contrapartida</span>');
+  semcp.slice(0,3).forEach(function(f){ var dv=finParDiverge(f); itens.push('<button onclick="finIrPara(\''+f.id+'\')" title="'+(dv?'A outra ponta existe, mas o valor ou a conta não batem mais (uma das pontas foi alterada)':'Transferência com a outra conta informada, mas sem a outra ponta')+'">'+fmtDate(f.data).slice(0,5)+' · '+(dv?'transferência diferente da outra ponta':'transferência: falta a outra ponta')+' · '+esc(finCadNome('contas',f.contaId))+'</button>'); });
+  if(semcp.length>3) itens.push('<span class="mais">e mais '+(semcp.length-3)+' com a outra ponta faltando</span>');
   if(!n) return '';
   return '<div class="fin-aten no-print" role="status"><span class="t">'+n+(n===1?' item pede atenção':' itens pedem atenção')+'</span>'+itens.join('')+'</div>';
 }
@@ -2932,7 +2930,7 @@ function finAjustaEmpresaDaConta(cid){
 function finChipsContas(){
   var rng=finPeriodoRange(), vis=finContasVisiveis(), sel=finContasEscopo().map(function(c){ return c.id; });
   function chipCaixa(c){
-    var p=finPendFech(c), pd=finParado(c), extra=pd?'<span class="fin-cx alerta fixo" title="Conta de passagem com saldo sem repasse desde '+fmtDate(pd.desde)+'">parado há '+pd.n+' dias</span>':'';
+    var p=finPendFech(c), pd=finParado(c), extra=pd?'<span class="fin-cx alerta fixo" title="Vinculada ao fundo com saldo sem repasse desde '+fmtDate(pd.desde)+'">sem repasse há '+pd.n+' dias úteis</span>':'';
     if(p.n>0) return '<div class="fin-cxs"><button class="fin-cx alerta" onclick="event.stopPropagation();finIrFecharDiaConta(\''+c.id+'\',\''+p.desde+'\')" title="Fechamento pendente desde '+fmtDate(p.desde)+'">'+finPendTexto(p)+'</button>'+extra+'</div>';
     return '<div class="fin-cxs">'+chipHoje(c)+extra+'</div>';
   }
@@ -3227,7 +3225,7 @@ function finValorLinha(L){
   if(e<0) return {t:'− '+fmt(-e),cor:tr?'neutra':'sai'};
   return {t:fmt(e),cor:tr?'neutra':'ent'};
 }
-function finLinhaHtml(L,unica,semAcoes){
+function finLinhaHtml(L,unica,semAcoes,semData){
   var f=L.f, v=Number(f.valor)||0, tr=finEhTransferencia(f);
   var origem=finCadNome('contas',f.contaId), outra=f.contraparteId?finCadNome('contas',f.contraparteId):'';
   var sub=[];
@@ -3250,10 +3248,11 @@ function finLinhaHtml(L,unica,semAcoes){
     '<button role="menuitem"'+(podeEst?' onclick="finEstornar(\''+f.id+'\')"':' disabled title="'+esc(porqueNao)+'"')+'>Estornar</button>'+
     '<button role="menuitem" class="dg" onclick="finExcluir(\''+f.id+'\')">Excluir</button></div></details>'];
   var fundo=(_finRecente===f.id?' style="background:var(--novo)"':'');
-  return '<tr'+fundo+' title="'+esc(finTrilha(f))+'">'+
-    '<td class="fin-dt">'+fmtDate(f.data)+'</td>'+
+  var dica=finTrilha(f)+(semAcoes?'':(finTrilha(f)?' · ':'')+'Clique duplo para alterar');
+  return '<tr'+fundo+' title="'+esc(dica)+'"'+(semAcoes?'':' ondblclick="if(!event.target.closest(\'button,a,details,input\'))finEditar(\''+f.id+'\')"')+'>'+
+    (semData?'':'<td class="fin-dt">'+fmtDate(f.data)+'</td>')+
     '<td><div class="fin-cel"><span class="fin-ell" title="'+esc(f.descricao||'')+'">'+(f.descricao?esc(f.descricao):'<span style="color:var(--mt)">—</span>')+'</span>'+marcas+'</div>'+
-      ((sub.length||semcp)?'<span class="fin-ell" style="font-size:12px;color:var(--mt)">'+esc(sub.join(' · '))+(semcp?(sub.length?' · ':'')+(finParDiverge(f)?'<span class="fin-semcp" title="A outra ponta existe, mas o valor ou a conta não batem mais">diferente da outra ponta</span>':'<span class="fin-semcp" title="Não achei a outra ponta desta transferência na outra conta">sem contrapartida</span>'):'')+'</span>':'')+'</td>'+
+      ((sub.length||semcp)?'<span class="fin-ell" style="font-size:12px;color:var(--mt)">'+esc(sub.join(' · '))+(semcp?(sub.length?' · ':'')+(finParDiverge(f)?'<span class="fin-semcp" title="A outra ponta existe, mas o valor ou a conta não batem mais">diferente da outra ponta</span>':'<span class="fin-semcp" title="Não achei a outra ponta desta transferência na outra conta">falta a outra ponta</span>'):'')+'</span>':'')+'</td>'+
     '<td><span class="fin-ell" title="'+esc(finNatNome(f)||'')+'">'+esc(finNatNome(f)||'—')+'</span></td>'+
     (unica?'':'<td><span class="fin-ell" title="'+esc(origem)+'">'+esc(origem)+'</span></td>')+
     celulas+
@@ -3278,7 +3277,7 @@ function finSituacaoDiaHtml(r,d){
   var cls, txt, tit;
   if(r.fech===r.apl && r.ress){ cls='s-ress'; txt=r.apl>1?'Fechadas com ressalva':'Fechado com ressalva'; tit=r.apl>1?'Todas fechadas; '+r.ress+(r.ress===1?' com ressalva':' com ressalva'):'Caixa fechado com ressalva neste dia'; }
   else if(r.fech===r.apl){ cls='s-ok'; txt=r.apl>1?'Fechadas':'Fechado'; tit=r.apl>1?'Todas as contas à vista estão fechadas neste dia':'Caixa fechado neste dia'; }
-  else if(r.fech>0){ cls=r.ress?'s-ress':'s-ab'; txt=r.fech+'/'+r.apl+' fechadas'; tit=r.fech+' de '+r.apl+' contas fechadas neste dia'+(r.ress?', '+r.ress+' com ressalva':''); }
+  else if(r.fech>0){ cls=r.ress?'s-ress':'s-ab'; txt=r.fech+' de '+r.apl+' contas fechadas'; tit=r.fech+' de '+r.apl+' contas fechadas neste dia'+(r.ress?', '+r.ress+' com ressalva':''); }
   else if(r.fer){ cls='s-fer'; txt='Feriado'; tit='Dia marcado como feriado: não conta nos avisos de caixa'; }
   else { cls='s-ab'; txt='Em aberto'; tit='Caixa ainda não fechado neste dia'; }
   return '<button type="button" class="fin-sit '+cls+'" title="'+esc(tit+' — abrir o Fechar caixa de '+fmtDate(d))+'" onclick="finFecharDia(\''+d+'\')">'+esc(txt)+'</button>';
@@ -3314,22 +3313,22 @@ function finAjustaColunas(){
     if(typeof getComputedStyle!=='function') return;
     var tb=document.querySelector('#fin-lista table.fin-tbl'); if(!tb||!tb.getBoundingClientRect) return;
     var cols=tb.querySelectorAll('col'), ths=tb.querySelectorAll('thead th'); if(!cols.length||cols.length!==ths.length) return;
-    var multi=tb.classList.contains('fin-tbl-m'), card=tb.parentElement;
+    var multi=tb.classList.contains('fin-tbl-m'), card=tb.parentElement, o=tb.classList.contains('sem-dt')?1:0;   /* o: sem a coluna Data, tudo anda uma posição */
     var W=Math.max(card.clientWidth||0, parseFloat(getComputedStyle(tb).minWidth)||0); if(!W) return;
-    var lin=tb.querySelector('tbody tr:not(.fin-dia)'), ref=lin?lin.children[1]:ths[1], refN=lin?lin.children[multi?4:3]:ths[1];
+    var lin=tb.querySelector('tbody tr:not(.fin-dia)'), ref=lin?lin.children[1-o]:ths[1-o], refN=lin?lin.children[(multi?4:3)-o]:ths[1-o];
     function pad(i){ var c=lin?lin.children[i]:ths[i]; if(!c) return 28; var s=getComputedStyle(c); return (parseFloat(s.paddingLeft)||0)+(parseFloat(s.paddingRight)||0); }
     function maior(lista,el){ var m=0; lista.forEach(function(x){ var w=finMedeTexto(x,el); if(w>m) m=w; }); return m; }
-    var iV=multi?4:3, iS=iV+1;
+    var iV=(multi?4:3)-o, iS=iV+1;
     var cab=function(i){ return finMedeTexto(ths[i].textContent.trim(),ths[i])+14; };   /* título e a seta da ordem */
     var celulas=function(i){ return [].map.call(tb.querySelectorAll('tbody tr:not(.fin-dia) td:nth-child('+(i+1)+'), tfoot td:nth-child('+(i===iV?2:3)+')'),function(td){ return td.textContent.trim(); }); };
     var dtMin=finMedeTexto('00/00/0000',lin?lin.children[0]:ref)+pad(0), dtIdeal=dtMin+18;
     var vW=Math.max(110,cab(iV),maior(celulas(iV),refN)+pad(iV)), sW=Math.max(110,cab(iS),maior(celulas(iS),lin?lin.children[iS]:refN)+pad(iS));
     var cats=finCad('categorias').map(function(n){ return n.nome; }).concat(['Transferência enviada','Transferência recebida']);
-    var catIdeal=Math.min(330,maior(cats,ref)+pad(2)+2), catMin=Math.min(catIdeal,150);
-    var conW=multi?Math.min(260,maior(finCad('contas').filter(function(c){ return c.ativo!==false; }).map(function(c){ return c.nome; }),ref)+pad(3)+2):0;
-    var descIdeal=finMedeTexto(FIN_DESC_REF,ref)+25+pad(1), descMin=240;
-    var acW=44, fixo=vW+sW+acW+conW, dt=dtIdeal, resto=W-fixo-dt;
-    if(resto<descIdeal+catIdeal){ dt=dtMin; resto=W-fixo-dt; }
+    var catIdeal=Math.min(330,maior(cats,ref)+pad(2-o)+2), catMin=Math.min(catIdeal,150);
+    var conW=multi?Math.min(260,maior(finCad('contas').filter(function(c){ return c.ativo!==false; }).map(function(c){ return c.nome; }),ref)+pad(3-o)+2):0;
+    var descIdeal=finMedeTexto(FIN_DESC_REF,ref)+25+pad(1-o), descMin=240;
+    var acW=44, fixo=vW+sW+acW+conW, dt=o?0:dtIdeal, resto=W-fixo-dt;
+    if(resto<descIdeal+catIdeal){ dt=o?0:dtMin; resto=W-fixo-dt; }
     var desc, cat;
     if(resto>=descIdeal+catIdeal){
       desc=descIdeal; cat=catIdeal; var extra=resto-descIdeal-catIdeal;
@@ -3340,7 +3339,7 @@ function finAjustaColunas(){
       desc+=q; cat+=q; if(multi) conW+=q;
     }
     else{ cat=catIdeal; desc=resto-cat; if(desc<descMin){ desc=descMin; cat=Math.max(catMin,resto-desc); } }
-    var w=[dt,desc,cat].concat(multi?[conW]:[]).concat([vW,sW,acW]);
+    var w=(o?[]:[dt]).concat([desc,cat]).concat(multi?[conW]:[]).concat([vW,sW,acW]);
     for(var i=0;i<cols.length;i++) cols[i].style.width=Math.round(w[i])+'px';
   }catch(e){}
 }
@@ -3672,15 +3671,16 @@ function finListaHtml(){
   var rng=finPeriodoRange(), escopo=finContasEscopo(), unica=escopo.length===1?escopo[0]:null;
   var todas=finLinhasEscopo(), vis=todas.filter(finLinhaPassa), tot=finTotaisPeriodo();
   var filtrando=!!((_finF.tipo&&_finF.tipo!=='todos')||_finF.categoriaId||_finF.q);
-  var ncol=unica?6:7, corpo='', porDia={}, dia='', dias=finSituacaoDosDias(vis.map(function(L){ return L.f.data; }),escopo);
+  var porData=!_finOrd.col||_finOrd.col==='data', comFaixas=porData&&_finAgrupar, semData=comFaixas;
+  var ncol=(unica?6:7)-(semData?1:0), corpo='', porDia={}, dia='', dias=finSituacaoDosDias(vis.map(function(L){ return L.f.data; }),escopo);
   /* colunas: Data · Descrição · Categoria · [Conta] · Entrada · Saída · Saldo após o lançamento · ações. A faixa de cada dia diz o dia, quantos lançamentos e a situação do fechamento */
   vis.forEach(function(L){ porDia[L.f.data]=(porDia[L.f.data]||0)+1; });
   /* ordem escolhida no cabeçalho; por data (a normal) mantém as faixas dos dias, nas outras a lista fica corrida */
-  var porData=!_finOrd.col||_finOrd.col==='data', ord=finOrdenaLinhas(vis), comFaixas=porData&&_finAgrupar;
+  var ord=finOrdenaLinhas(vis);
   ord.forEach(function(L){
     var d=L.f.data;
-    if(comFaixas && d!==dia){ corpo+=finFaixaDiaHtml(d,porDia[d],dias[d],ncol); dia=d; corpo+=finLinhaHtml(L,unica); return; }
-    var h=finLinhaHtml(L,unica);
+    if(comFaixas && d!==dia){ corpo+=finFaixaDiaHtml(d,porDia[d],dias[d],ncol); dia=d; corpo+=finLinhaHtml(L,unica,false,semData); return; }
+    var h=finLinhaHtml(L,unica,false,semData);
     /* sem as faixas: a primeira linha de cada dia ganha uma divisória um pouco mais marcada */
     if(porData && !comFaixas && dia && d!==dia) h=h.replace(/^<tr/,'<tr class="nd"');
     dia=d; corpo+=h;
@@ -3691,19 +3691,20 @@ function finListaHtml(){
       '<a href="#" onclick="finNovo(\'entrada\');return false" style="color:var(--green);font-weight:600">+ Entrada</a> · '+
       '<a href="#" onclick="finNovo(\'saida\');return false" style="color:var(--red);font-weight:600">+ Saída</a>')+'</td></tr>';
   var ent=0,sai=0; vis.forEach(function(L){ ent+=L.ent; sai+=L.sai; });
-  var cab='<tr>'+finThOrd('data','Data','fin-dt','')+finThOrd('desc','Descrição','','')+finThOrd('cat','Categoria','','')+(unica?'':finThOrd('conta','Conta','',''))+
+  var cab='<tr>'+(semData?'':finThOrd('data','Data','fin-dt',''))+finThOrd('desc','Descrição','','')+finThOrd('cat','Categoria','','')+(unica?'':finThOrd('conta','Conta','',''))+
     finThOrd('valor','Valor','r','Entrada sem sinal; saída com o sinal de menos')+finThOrd('saldo','Saldo','r','Saldo depois deste lançamento')+'<th></th></tr>';
   /* Valores e ações com largura fixa (o Saldo e os botões ficam colados à direita); Categoria (e Conta) em %;
      a Descrição, sem largura, ocupa o que sobrar. */
   var larg=unica?['100px','','18%','160px','150px','44px']:['100px','','13%','13%','160px','150px','44px'];
   var nomesCol=unica?['c-dt','c-desc','c-cat','','','']:['c-dt','c-desc','c-cat','c-conta','','',''];
+  if(semData){ larg=larg.slice(1); nomesCol=nomesCol.slice(1); }
   var cols='<colgroup>'+larg.map(function(w,i){ var c=nomesCol[i]?' class="'+nomesCol[i]+'"':''; return w?'<col'+c+' style="width:'+w+'">':'<col'+c+'>'; }).join('')+'</colgroup>';
   /* linha de total no fim da tabela: a soma da coluna Valor (o que está na tela) e o saldo final do período */
   var liq=Math.round((ent-sai)*100)/100;
   var total='<tfoot><tr class="fin-tot"><td colspan="'+(ncol-3)+'"><strong>Total do período</strong> <span class="n">· '+(filtrando?vis.length+' de '+todas.length+' lançamentos, com filtros':todas.length+(todas.length===1?' lançamento':' lançamentos'))+'</span></td>'+
     '<td class="r" title="Entradas '+fmt(ent)+' · Saídas '+fmt(sai)+'"><strong style="color:'+(liq<0?'var(--red)':(liq>0?'var(--green)':'var(--tx)'))+'">'+(liq<0?'− '+fmt(-liq):fmt(liq))+'</strong></td>'+
     '<td class="r" title="'+(filtrando?'Saldo final do período (não muda com os filtros)':'Saldo final do período')+'"><strong'+(tot.fin<0?' style="color:var(--red)"':'')+'>'+fmt(tot.fin)+'</strong></td><td></td></tr></tfoot>';
-  return '<div class="card fin-tw'+(unica?'':' m')+'"><table class="tbl fin-tbl'+(unica?'':' fin-tbl-m')+(comFaixas?' agr':'')+'">'+cols+'<thead>'+cab+'</thead><tbody>'+corpo+'</tbody>'+total+'</table></div>';
+  return '<div class="card fin-tw'+(unica?'':' m')+'"><table class="tbl fin-tbl'+(unica?'':' fin-tbl-m')+(comFaixas?' agr':'')+(semData?' sem-dt':'')+'">'+cols+'<thead>'+cab+'</thead><tbody>'+corpo+'</tbody>'+total+'</table></div>';
 }
 
 function finViewLancamentos(){
@@ -3738,7 +3739,7 @@ function finViewLancamentos(){
   '</div>';
   return finFormHtml()+finChipsContas()+finPeriodoHtml()+
     '<div id="fin-conteudo">'+finStripHtml()+'</div>'+
-    filtros+finAtencaoHtml()+
+    filtros+'<div id="fin-fat">'+finFiltrosAtivosHtml()+'</div>'+finAtencaoHtml()+
     '<div id="fin-lista">'+finListaHtml()+'</div>';
 }
 
@@ -4036,6 +4037,24 @@ async function finExcluirGravar(id,motivo){
 }
 function finLimparFiltros(){
   _finF.tipo='todos'; _finF.categoriaId=''; _finF.q='';
+  if(_finEmp){ finSetEmp(''); return; }   /* a empresa também é filtro: limpar tudo volta a mostrar todas */
+  navigate('financeiro');
+}
+/* Os filtros em uso, como etiquetas: cada uma sai com um clique; "Limpar tudo" tira todos. */
+function finFiltrosAtivosHtml(){
+  var it=[], emp=_finEmp?finCadById('empresas',_finEmp):null;
+  if(_finF.tipo&&_finF.tipo!=='todos') it.push(['tipo',{entrada:'Entradas',saida:'Saídas',transferencia:'Transferências'}[_finF.tipo]]);
+  if(_finF.categoriaId) it.push(['cat','Categoria: '+finCadNome('categorias',_finF.categoriaId)]);
+  if(_finF.q) it.push(['q','Busca: “'+_finF.q+'”']);
+  if(emp) it.push(['emp','Empresa: '+emp.nome]);
+  if(!it.length) return '';
+  return '<div class="fin-fat no-print"><span class="t">Filtrando:</span>'+it.map(function(x){
+    return '<button type="button" class="fin-fchip" onclick="finTiraFiltro(\''+x[0]+'\')" title="Tirar este filtro">'+esc(x[1])+' <span aria-hidden="true">✕</span></button>';
+  }).join('')+(it.length>1?'<button type="button" class="fin-flimpa" onclick="finLimparFiltros()">Limpar tudo</button>':'')+'</div>';
+}
+function finTiraFiltro(k){
+  if(k==='emp'){ finSetEmp(''); return; }
+  if(k==='tipo') _finF.tipo='todos'; else if(k==='cat') _finF.categoriaId=''; else if(k==='q') _finF.q='';
   navigate('financeiro');
 }
 
@@ -4043,6 +4062,7 @@ function filterFin(){
   function v(id){ var e=document.getElementById(id); return e?e.value:''; }
   _finF.tipo=v('fin-tf')||'todos'; _finF.categoriaId=v('fin-nf'); _finF.q=v('fin-q');
   var l=document.getElementById('fin-lista'); if(l){ l.innerHTML=finListaHtml(); finAjustaColunas(); }
+  var fa=document.getElementById('fin-fat'); if(fa) fa.innerHTML=finFiltrosAtivosHtml();
   finKpiMarca();
 }
 /* Cartão de Entradas, Saídas ou Transferências: filtra a lista por esse tipo; clicar de novo volta a mostrar tudo. */
@@ -4080,8 +4100,8 @@ function finCadNovo(empId){ _finCadAberto=true; _finEmpNova=false; _finCadEmpPre
 function finEmpNova(){ _finEmpNova=true; _finCadAberto=false; _finCadEdit={}; finCadAbreForm(); }
 
 /* Para que serve cada conta, em palavras de quem usa. */
-var FIN_FUNCAO_ROTULO={operacional:'Caixa da empresa',transito:'Conta de passagem',externa:'Só recebe repasse'};
-var FIN_FUNCAO_DICA={operacional:'O caixa do dia a dia da empresa.',transito:'O dinheiro entra e é repassado ao fundo.',externa:'Conta do fundo na administradora: só recebe repasse, sem saldo aqui.'};
+var FIN_FUNCAO_ROTULO={operacional:'Caixa da empresa',transito:'Vinculada ao fundo',externa:'Só recebe repasse'};
+var FIN_FUNCAO_DICA={operacional:'O caixa do dia a dia da empresa.',transito:'Recebe o dinheiro dos processos e repassa ao fundo.',externa:'Conta do fundo na administradora: só recebe repasse, sem saldo aqui.'};
 /* CPF/CNPJ com pontuação: 14 dígitos = CNPJ, 11 = CPF; qualquer outra coisa fica como foi digitada. */
 function finFormataDoc(s){
   var d=String(s||'').replace(/\D/g,'');
