@@ -581,7 +581,6 @@ body.dark .fin-tw .fin-tbl thead th{background:var(--card)}
 .fin-cxs{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start}
 .fin-cx.alerta{color:var(--amber);border-color:color-mix(in srgb,var(--amber) 45%,var(--bd))}
 .fin-cx.alerta::before{background:var(--amber)}
-.fin-cx.fixo{cursor:default}
 .fin-aten{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin:0 0 12px;padding:10px 14px;border:1px solid color-mix(in srgb,var(--amber) 35%,var(--bd));border-radius:12px;background:var(--amberl);color:var(--amber);font-size:13px}
 .fin-aten .t{font-weight:600;margin-right:4px}
 .fin-aten button{font:inherit;font-size:12px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:999px;padding:4px 11px;cursor:pointer}
@@ -986,7 +985,7 @@ var currentPage='dashboard';
 // ── PERSIST ────────────────────────────────────────────────
 /* Um registro por conta: o último caixa fechado. Cada fechamento novo substitui o anterior. */
 async function finCarregaCaixas(){ S.finCaixa=await fetchCollection('caixas'); }
-/* Feriados: o dia marcado vale para todas as contas e não conta nos avisos de caixa (dias sem fechar, saldo parado). */
+/* Feriados: o dia marcado vale para todas as contas e não conta nos avisos de caixa (dias sem fechar). */
 async function finCarregaFeriados(){ try{ S.finFeriados=await fetchCollection('feriados'); }catch(e){ S.finFeriados=[]; } }
 function finEhFeriado(d){ return (S.finFeriados||[]).some(function(f){ return f.data===d; }); }
 async function finMarcarFeriado(d,liga){
@@ -2763,7 +2762,7 @@ function finOcultarValores(){
   var b=document.getElementById('fin-olho');
   if(b){ b.setAttribute('aria-pressed',_finOculto?'true':'false'); b.innerHTML=finOlhoSvg(_finOculto)+'<span>'+(_finOculto?'Mostrar valores':'Ocultar valores')+'</span>'; }
 }
-/* ── Avisos: dias úteis sem fechar, saldo parado na conta de passagem, transferência sem contrapartida ── */
+/* ── Avisos: dias úteis sem fechar e transferência sem a outra ponta ── */
 function finEhDiaUtil(d){ var w=new Date(d+'T12:00:00').getDay(); return w!==0 && w!==6 && !finEhFeriado(d); }
 /* ── Regra de fechamento de cada conta: diário, semanal (no dia escolhido), mensal (último dia do mês) ou sem fechamento ── */
 var FIN_FECH_TIPOS=['diario','semanal','mensal','nenhum'];
@@ -2821,24 +2820,7 @@ function finPendFech(c){
   }
   return {n:n,desde:desde,un:un};
 }
-/* Conta de passagem deve zerar a cada repasse: aviso quando o saldo fica acima de zero por 2 dias úteis ou mais. */
-function finParado(c){
-  if(!c || c.funcao!=='transito') return null;
-  var hoje=todayStr(), ini=finIniAvisos(c); if(!ini || hoje<ini) return null;
-  var saldo=Math.round(finSaldoConta(c,hoje)*100)/100; if(saldo<=0.005) return null;
-  var d=hoje, desde=hoje, guarda=0;
-  while(guarda<120){
-    guarda++;
-    var ant=finDiaMais(d,-1);
-    if(ant<ini){ desde=ini; break; }
-    if(finSaldoConta(c,ant)<=0.005){ desde=d; break; }
-    d=ant; desde=d;
-  }
-  var n=0, x=desde; while(x<hoje){ if(finEhDiaUtil(x)) n++; x=finDiaMais(x,1); }
-  return n>=2?{n:n,valor:saldo,desde:desde}:null;
-}
 function finIrFecharDiaConta(cid,d){ finAjustaEmpresaDaConta(cid); _fechConta=cid; finCaixaIrDia(d); }
-function finSoConta(cid){ finAjustaEmpresaDaConta(cid); _finRecente=null; finSalvaContasSel([cid]); navigate('financeiro'); }
 /* Leva a um lançamento: marca a conta dele, vai ao período e rola até a linha, destacada. */
 function finIrPara(id){
   var f=(S.financeiro||[]).find(function(x){ return x.id===id; }); if(!f) return;
@@ -2855,8 +2837,6 @@ function finAtencaoHtml(){
     if(p.n>0){ n++; itens.push('<button onclick="finIrFecharDiaConta(\''+c.id+'\',\''+p.desde+'\')" title="Abre o Fechar caixa no fechamento mais antigo pendente ('+fmtDate(p.desde)+')">'+esc(c.nome)+' · '+finPendTexto(p)+'</button>'); }
     var rf=finCaixasARefazer(c.id).sort(function(a,b){ return a.data<b.data?-1:1; });
     if(rf.length){ n++; itens.push('<button onclick="finIrFecharDiaConta(\''+c.id+'\',\''+rf[0].data+'\')" title="O saldo do sistema mudou depois do fechamento. Abre o Fechar caixa no mais antigo ('+fmtDate(rf[0].data)+')">'+esc(c.nome)+' · '+rf.length+(rf.length===1?' fechamento a refazer':' fechamentos a refazer')+'</button>'); }
-    var pd=finParado(c);
-    if(pd){ n++; itens.push('<button onclick="finSoConta(\''+c.id+'\')" title="Vinculada ao fundo com saldo sem repasse desde '+fmtDate(pd.desde)+'">'+esc(c.nome)+' · <span class="fin-mv">'+fmt(pd.valor)+'</span> sem repasse há '+pd.n+' dias úteis</button>'); }
   });
   var semcp=(S.financeiro||[]).filter(function(f){ return finEhTransferencia(f) && f.contraparteId && ids[f.contaId] && !finTemPar(f); })
     .sort(function(a,b){ return a.data<b.data?1:(a.data>b.data?-1:0); });
@@ -2930,9 +2910,9 @@ function finAjustaEmpresaDaConta(cid){
 function finChipsContas(){
   var rng=finPeriodoRange(), vis=finContasVisiveis(), sel=finContasEscopo().map(function(c){ return c.id; });
   function chipCaixa(c){
-    var p=finPendFech(c), pd=finParado(c), extra=pd?'<span class="fin-cx alerta fixo" title="Vinculada ao fundo com saldo sem repasse desde '+fmtDate(pd.desde)+'">sem repasse há '+pd.n+' dias úteis</span>':'';
-    if(p.n>0) return '<div class="fin-cxs"><button class="fin-cx alerta" onclick="event.stopPropagation();finIrFecharDiaConta(\''+c.id+'\',\''+p.desde+'\')" title="Fechamento pendente desde '+fmtDate(p.desde)+'">'+finPendTexto(p)+'</button>'+extra+'</div>';
-    return '<div class="fin-cxs">'+chipHoje(c)+extra+'</div>';
+    var p=finPendFech(c);
+    if(p.n>0) return '<div class="fin-cxs"><button class="fin-cx alerta" onclick="event.stopPropagation();finIrFecharDiaConta(\''+c.id+'\',\''+p.desde+'\')" title="Fechamento pendente desde '+fmtDate(p.desde)+'">'+finPendTexto(p)+'</button></div>';
+    return '<div class="fin-cxs">'+chipHoje(c)+'</div>';
   }
   function chipHoje(c){
     var hoje=todayStr(), rg=finFechRegra(c);
